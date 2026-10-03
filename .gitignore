@@ -3,6 +3,7 @@
 /ceebee
 *.exe
 .task/
+/dist/
 
 # Frontend
 frontend/node_modules/

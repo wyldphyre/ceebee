@@ -130,6 +130,23 @@ wails3 build GOOS=windows GOARCH=arm64    # for ARM Windows devices
 
 Without `GOARCH`, the build uses the architecture of the machine you build on. `wails3 package GOOS=windows` builds an installer instead, which also registers the comic file types; it needs `makensis` (`brew install makensis` on macOS). Windows needs Microsoft's WebView2 runtime, which comes with Windows 11 and current versions of Windows 10.
 
+### Release builds
+
+On a Mac, `scripts/release.sh` builds CeeBee for macOS and Windows, on both x64 and arm64, and zips each build into `dist/`:
+
+```
+dist/CeeBee-1.0.0-macos-arm64.zip     CeeBee.app
+dist/CeeBee-1.0.0-macos-x64.zip       CeeBee.app
+dist/CeeBee-1.0.0-windows-arm64.zip   CeeBee.exe
+dist/CeeBee-1.0.0-windows-x64.zip     CeeBee.exe
+```
+
+The version in the file names comes from `version` in `main.go`.
+
+The script needs the same tools as a normal build, plus Xcode's command line tools for the macOS builds. It finds `wails3` in `~/go/bin` even if that folder isn't on your `PATH`. Linux isn't included, because Linux builds need the GTK libraries and have to be made on Linux (or in Docker).
+
+The macOS apps are only ad-hoc signed, so on another Mac they have to be opened the first time by right-clicking the app and choosing Open, or by allowing them under System Settings › Privacy & Security.
+
 ## Testing
 
 The archive, metadata, layout and settings logic is covered by Go unit tests:
@@ -162,6 +179,8 @@ frontend/
   src/style.css
 build/               Wails build configuration, icons, platform packaging and
                      file associations (build/config.yml)
+scripts/
+  release.sh         Builds and zips the macOS and Windows releases
 SPEC.md              The original specification
 ```
 
