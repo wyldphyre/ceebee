@@ -32,6 +32,7 @@ type BookInfo struct {
 type ReaderService struct {
 	app      *application.App
 	settings *settings.Store
+	onOpen   func() // called after a book opens
 
 	mu       sync.RWMutex
 	book     *book.Book
@@ -79,7 +80,7 @@ func (s *ReaderService) OpenPath(path string) (*BookInfo, error) {
 		old.Close()
 	}
 
-	return &BookInfo{
+	info := &BookInfo{
 		BookID:     id,
 		Title:      b.Title,
 		PageCount:  b.PageCount(),
@@ -88,7 +89,21 @@ func (s *ReaderService) OpenPath(path string) (*BookInfo, error) {
 		Spreads:    book.BuildSpreads(b.PageCount(), b.CoverIndex, b.Wide),
 		Metadata:   b.Metadata,
 		StartPage:  start,
-	}, nil
+	}
+	if err := s.settings.AddRecent(path); err != nil {
+		log.Printf("saving recent files: %v", err)
+	}
+	if s.onOpen != nil {
+		s.onOpen()
+	}
+	return info, nil
+}
+
+// currentPath returns the open book's path, or "" if none is open.
+func (s *ReaderService) currentPath() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.bookPath
 }
 
 // ViewSettings returns the saved toolbar settings.

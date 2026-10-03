@@ -4,7 +4,6 @@ import (
 	"embed"
 	"log"
 	"net/http"
-	"runtime"
 
 	"ceebee/settings"
 
@@ -20,7 +19,7 @@ var appIcon []byte
 
 // version is the app version. Keep it in step with info.version in
 // build/config.yml and the platform files generated from it.
-const version = "0.7.0"
+const version = "1.0.0"
 
 const repoURL = "https://github.com/wyldphyre/ceebee"
 
@@ -30,6 +29,17 @@ func init() {
 	application.RegisterEvent[string]("open-file")
 	// Sent when About CeeBee is chosen from the menu.
 	application.RegisterEvent[application.Void]("show-about")
+	// Sent when File › Open… is chosen.
+	application.RegisterEvent[application.Void]("show-open-dialog")
+	// Sent with whether the toolbar should be shown, from View › Show Toolbar.
+	application.RegisterEvent[bool]("show-toolbar")
+	// Sent with whether the Info panel should be shown, from View › Show Info.
+	application.RegisterEvent[bool]("show-info")
+	// Sent from the frontend when the Info panel's state changes.
+	application.RegisterEvent[InfoState]("info-state")
+	// Sent with a navigation action from the Go menu: "next", "previous",
+	// "right", "left", "first" or "last".
+	application.RegisterEvent[string]("navigate")
 }
 
 func main() {
@@ -55,7 +65,8 @@ func main() {
 	})
 	reader.app = app
 
-	app.Menu.SetApplicationMenu(appMenu(app, reader))
+	menus := newMenus(app, reader)
+	reader.onOpen = menus.bookOpened
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:            "Comic Reader",
@@ -66,6 +77,12 @@ func main() {
 		// Windows only shows a menu bar if the window opts in.
 		UseApplicationMenu: true,
 		URL:                "/",
+	})
+	menus.window = window
+	app.Event.On("info-state", func(e *application.CustomEvent) {
+		if s, ok := e.Data.(InfoState); ok {
+			menus.setInfoState(s)
+		}
 	})
 
 	window.OnWindowEvent(events.Common.WindowFilesDropped, func(e *application.WindowEvent) {
@@ -95,52 +112,4 @@ func iconMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("Content-Type", "image/png")
 		w.Write(appIcon)
 	})
-}
-
-// appMenu replaces Wails' default menu so that About opens CeeBee's own
-// dialog and Help links to the project rather than the Wails website. About
-// goes in the app menu on macOS and the Help menu elsewhere.
-func appMenu(app *application.App, reader *ReaderService) *application.Menu {
-	menu := application.NewMenu()
-	showAbout := func(*application.Context) { app.Event.Emit("show-about") }
-
-	if runtime.GOOS == "darwin" {
-		appMenu := menu.AddSubmenu("CeeBee")
-		appMenu.Add("About CeeBee").OnClick(showAbout)
-		appMenu.AddSeparator()
-		appMenu.AddRole(application.ServicesMenu)
-		appMenu.AddSeparator()
-		appMenu.AddRole(application.Hide)
-		appMenu.AddRole(application.HideOthers)
-		appMenu.AddRole(application.UnHide)
-		appMenu.AddSeparator()
-		appMenu.AddRole(application.Quit)
-	}
-
-	file := menu.AddSubmenu("File")
-	remember := file.AddCheckbox("Remember Reading Position", reader.settings.RememberPosition())
-	remember.OnClick(func(ctx *application.Context) {
-		if err := reader.settings.SetRememberPosition(ctx.ClickedMenuItem().Checked()); err != nil {
-			log.Printf("saving settings: %v", err)
-		}
-	})
-	file.AddSeparator()
-	if runtime.GOOS == "darwin" {
-		file.AddRole(application.CloseWindow)
-	} else {
-		file.AddRole(application.Quit)
-	}
-	menu.AddRole(application.EditMenu)
-	menu.AddRole(application.ViewMenu)
-	menu.AddRole(application.WindowMenu)
-
-	help := menu.AddSubmenu("Help")
-	help.Add("CeeBee on GitHub").OnClick(func(*application.Context) {
-		app.Browser.OpenURL(repoURL)
-	})
-	if runtime.GOOS != "darwin" {
-		help.AddSeparator()
-		help.Add("About CeeBee").OnClick(showAbout)
-	}
-	return menu
 }

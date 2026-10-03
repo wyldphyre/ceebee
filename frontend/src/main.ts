@@ -6,6 +6,7 @@ const APP_TITLE = "Comic Reader";
 const PLACEHOLDER_WIDTH = 600;
 const PLACEHOLDER_HEIGHT = 900;
 
+const toolbarEl = document.getElementById("toolbar")!;
 const openButton = document.getElementById("open") as HTMLButtonElement;
 const layoutButtons = document.querySelectorAll<HTMLButtonElement>("button[data-pages]");
 const directionButtons = document.querySelectorAll<HTMLButtonElement>("button[data-direction]");
@@ -152,6 +153,7 @@ function updateToolbar() {
     infoButton.disabled = !hasInfo;
     infoButton.setAttribute("aria-pressed", String(hasInfo && showInfo));
     infoEl.hidden = !(hasInfo && showInfo);
+    syncInfoMenu();
     if (!book) {
         indicatorEl.textContent = "";
         return;
@@ -161,6 +163,13 @@ function updateToolbar() {
     const last = Math.max(...pages) + 1;
     indicatorEl.textContent = `${first === last ? first : `${first}–${last}`} / ${book.pageCount}`;
     progressFillEl.style.width = `${(last / book.pageCount) * 100}%`;
+}
+
+// Jump straight to a view, such as the first or last.
+function goTo(index: number) {
+    if (!book || index === viewIndex || index < 0 || index >= views().length) return;
+    viewIndex = index;
+    render();
 }
 
 function go(delta: number, atEnd = false) {
@@ -267,12 +276,42 @@ function fieldLabel(name: string): string {
     return name.replace(/([a-z])([A-Z])/g, "$1 $2");
 }
 
-function toggleInfo() {
+function setInfo(visible: boolean) {
     if (!book?.metadata?.length) return;
-    showInfo = !showInfo;
+    showInfo = visible;
     updateToolbar();
     layout();
     stopIndex = -1;
+}
+
+function toggleInfo() {
+    setInfo(!showInfo);
+}
+
+// Keeps View › Show Info in step with the panel, telling Go only on changes.
+let lastInfoState = "";
+function syncInfoMenu() {
+    const available = (book?.metadata?.length ?? 0) > 0;
+    const state = {available, visible: available && showInfo};
+    const key = JSON.stringify(state);
+    if (key === lastInfoState) return;
+    lastInfoState = key;
+    Events.Emit("info-state", state);
+}
+
+type Action = "next" | "previous" | "right" | "left" | "first" | "last";
+
+// Runs a navigation action, from a key or the Go menu.
+function navigate(action: Action) {
+    switch (action) {
+        case "next": step(1); break;
+        case "previous": step(-1); break;
+        // Right and left follow the page visually, so they swap in RTL.
+        case "right": go(rtl ? -1 : 1); break;
+        case "left": go(rtl ? 1 : -1); break;
+        case "first": goTo(0); break;
+        case "last": goTo(views().length - 1); break;
+    }
 }
 
 function showAbout() {
@@ -333,6 +372,18 @@ progressButton.addEventListener("click", () => {
 
 document.getElementById("error-close")!.addEventListener("click", hideError);
 
+// WebKit focuses the first button when the window becomes active, which
+// shows its focus ring. Undo that unless the user is tabbing through the
+// toolbar with the keyboard.
+let tabbing = false;
+window.addEventListener("keydown", (e) => { if (e.key === "Tab") tabbing = true; }, true);
+window.addEventListener("pointerdown", () => tabbing = false, true);
+document.addEventListener("focusin", (e) => {
+    if (!tabbing && e.target instanceof HTMLButtonElement && !aboutEl.contains(e.target)) {
+        e.target.blur();
+    }
+});
+
 // Don't leave toolbar buttons focused, or Space would press them.
 document.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => b.blur()));
 
@@ -343,21 +394,23 @@ window.addEventListener("keydown", (e) => {
         toggleInfo();
         return;
     }
-    switch (e.key) {
-        case " ":
-            e.preventDefault();
-            step(e.shiftKey ? -1 : 1);
-            break;
-        case "ArrowRight":
-            e.preventDefault();
-            go(rtl ? -1 : 1);
-            break;
-        case "ArrowLeft":
-            e.preventDefault();
-            go(rtl ? 1 : -1);
-            break;
+    let action: Action | null = null;
+    if (e.key === " ") action = e.shiftKey ? "previous" : "next";
+    else if (e.key === "ArrowRight") action = "right";
+    else if (e.key === "ArrowLeft") action = "left";
+    // Home and End, or ⌘↑ and ⌘↓ on Macs without those keys.
+    else if (e.key === "Home" || (e.metaKey && e.key === "ArrowUp")) action = "first";
+    else if (e.key === "End" || (e.metaKey && e.key === "ArrowDown")) action = "last";
+    if (action) {
+        e.preventDefault();
+        navigate(action);
     }
 });
+
+Events.On("navigate", (e) => {
+    if (!aboutEl.open) navigate(e.data as Action);
+});
+Events.On("show-info", (e) => setInfo(e.data));
 
 window.addEventListener("resize", () => {
     layout();
@@ -370,6 +423,17 @@ readerEl.addEventListener("pointerdown", () => stopIndex = -1);
 
 infoButton.addEventListener("click", toggleInfo);
 Events.On("show-about", showAbout);
+Events.On("show-open-dialog", () => open(() => ReaderService.OpenDialog()));
+Events.On("show-toolbar", (e) => {
+    toolbarEl.hidden = !e.data;
+    layout();
+    stopIndex = -1;
+});
+
+// Add the shortcuts to the tooltips, with the platform's modifier key.
+const mod = navigator.platform.startsWith("Mac") ? "⌘" : "Ctrl+";
+openButton.title = `Open a comic (${mod}O)`;
+infoButton.title = `Info (${mod}I)`;
 
 const aboutLink = document.getElementById("about-link") as HTMLAnchorElement;
 aboutLink.addEventListener("click", (e) => {

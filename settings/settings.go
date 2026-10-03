@@ -11,6 +11,9 @@ import (
 	"time"
 )
 
+// maxRecent is how many recently opened books File › Open Recent lists.
+const maxRecent = 10
+
 // maxPositions limits how many books' reading positions are kept; the least
 // recently read are dropped first.
 const maxPositions = 500
@@ -32,6 +35,7 @@ type file struct {
 	View             View                `json:"view"`
 	RememberPosition bool                `json:"rememberPosition"`
 	Positions        map[string]Position `json:"positions"` // keyed by book path
+	Recent           []string            `json:"recent"`    // book paths, newest first
 }
 
 // Store is the settings file, loaded into memory. It is safe for concurrent use.
@@ -129,6 +133,35 @@ func (s *Store) SetPosition(book string, page int) error {
 	if len(s.data.Positions) > maxPositions {
 		s.prune()
 	}
+	return s.save()
+}
+
+// Recent returns the recently opened books, newest first.
+func (s *Store) Recent() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.data.Recent...)
+}
+
+// AddRecent records a book as the most recently opened.
+func (s *Store) AddRecent(book string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	recent := []string{book}
+	for _, b := range s.data.Recent {
+		if b != book && len(recent) < maxRecent {
+			recent = append(recent, b)
+		}
+	}
+	s.data.Recent = recent
+	return s.save()
+}
+
+// ClearRecent empties the recently opened list.
+func (s *Store) ClearRecent() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.data.Recent = nil
 	return s.save()
 }
 
