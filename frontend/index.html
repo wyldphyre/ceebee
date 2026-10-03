@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Comic Reader</title>
+</head>
+<body data-file-drop-target>
+<header class="toolbar">
+    <button id="open" type="button">Open</button>
+    <span id="title" class="title"></span>
+    <span id="indicator" class="indicator"></span>
+    <span class="segmented">
+        <button type="button" data-pages="1" aria-pressed="false" disabled>1 Page</button>
+        <button type="button" data-pages="2" aria-pressed="true" disabled>2 Pages</button>
+    </span>
+    <span class="segmented">
+        <button type="button" data-direction="ltr" aria-pressed="true" disabled>LTR</button>
+        <button type="button" data-direction="rtl" aria-pressed="false" disabled>RTL</button>
+    </span>
+    <span class="segmented">
+        <button type="button" data-scale="window" aria-pressed="true">Scale to Window</button>
+        <button type="button" data-scale="width" aria-pressed="false">Scale to Width</button>
+        <button type="button" data-scale="original" aria-pressed="false">Original Size</button>
+    </span>
+    <button id="progress-toggle" type="button" aria-pressed="true">Progress</button>
+</header>
+<main id="reader" class="reader">
+    <div id="spread" class="spread"></div>
+    <p id="empty" class="empty">Open a comic or drop a file here</p>
+    <div id="error" class="error" hidden>
+        <span id="error-message"></span>
+        <button id="error-close" type="button" aria-label="Dismiss">×</button>
+    </div>
+</main>
+<div id="progress" class="progress" hidden><div id="progress-fill" class="progress-fill"></div></div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
