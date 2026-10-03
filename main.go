@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"runtime"
 
+	"ceebee/settings"
+
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 )
@@ -18,7 +20,7 @@ var appIcon []byte
 
 // version is the app version. Keep it in step with info.version in
 // build/config.yml and the platform files generated from it.
-const version = "0.6.0"
+const version = "0.7.0"
 
 const repoURL = "https://github.com/wyldphyre/ceebee"
 
@@ -31,7 +33,11 @@ func init() {
 }
 
 func main() {
-	reader := &ReaderService{}
+	settingsPath, err := settings.DefaultPath()
+	if err != nil {
+		log.Printf("no settings directory, settings won't be saved: %v", err)
+	}
+	reader := &ReaderService{settings: settings.Load(settingsPath)}
 
 	app := application.New(application.Options{
 		Name:        "CeeBee",
@@ -49,7 +55,7 @@ func main() {
 	})
 	reader.app = app
 
-	app.Menu.SetApplicationMenu(appMenu(app))
+	app.Menu.SetApplicationMenu(appMenu(app, reader))
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:            "Comic Reader",
@@ -94,7 +100,7 @@ func iconMiddleware(next http.Handler) http.Handler {
 // appMenu replaces Wails' default menu so that About opens CeeBee's own
 // dialog and Help links to the project rather than the Wails website. About
 // goes in the app menu on macOS and the Help menu elsewhere.
-func appMenu(app *application.App) *application.Menu {
+func appMenu(app *application.App, reader *ReaderService) *application.Menu {
 	menu := application.NewMenu()
 	showAbout := func(*application.Context) { app.Event.Emit("show-about") }
 
@@ -111,7 +117,19 @@ func appMenu(app *application.App) *application.Menu {
 		appMenu.AddRole(application.Quit)
 	}
 
-	menu.AddRole(application.FileMenu)
+	file := menu.AddSubmenu("File")
+	remember := file.AddCheckbox("Remember Reading Position", reader.settings.RememberPosition())
+	remember.OnClick(func(ctx *application.Context) {
+		if err := reader.settings.SetRememberPosition(ctx.ClickedMenuItem().Checked()); err != nil {
+			log.Printf("saving settings: %v", err)
+		}
+	})
+	file.AddSeparator()
+	if runtime.GOOS == "darwin" {
+		file.AddRole(application.CloseWindow)
+	} else {
+		file.AddRole(application.Quit)
+	}
 	menu.AddRole(application.EditMenu)
 	menu.AddRole(application.ViewMenu)
 	menu.AddRole(application.WindowMenu)

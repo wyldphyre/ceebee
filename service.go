@@ -2,13 +2,16 @@ package main
 
 import (
 	"crypto/rand"
+	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 
 	"ceebee/book"
+	"ceebee/settings"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -20,17 +23,20 @@ type BookInfo struct {
 	PageCount  int          `json:"pageCount"`
 	CoverIndex int          `json:"coverIndex"`
 	RTL        bool         `json:"rtl"`
-	Spreads    [][]int      `json:"spreads"`  // two-page mode spreads
-	Metadata   []book.Field `json:"metadata"` // ComicInfo.xml fields, if any
+	Spreads    [][]int      `json:"spreads"`   // two-page mode spreads
+	Metadata   []book.Field `json:"metadata"`  // ComicInfo.xml fields, if any
+	StartPage  int          `json:"startPage"` // page to open at: the saved position, or 0
 }
 
 // ReaderService holds the open book and serves its pages.
 type ReaderService struct {
-	app *application.App
+	app      *application.App
+	settings *settings.Store
 
-	mu     sync.RWMutex
-	book   *book.Book
-	bookID string
+	mu       sync.RWMutex
+	book     *book.Book
+	bookID   string
+	bookPath string // absolute path, the key for its saved reading position
 
 	// A file the OS asked us to open before the frontend was ready for it.
 	pendingPath   string
@@ -57,10 +63,17 @@ func (s *ReaderService) OpenPath(path string) (*BookInfo, error) {
 		return nil, err
 	}
 	id := rand.Text()
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	start, ok := s.settings.Position(path)
+	if !ok || start < 0 || start >= b.PageCount() {
+		start = 0
+	}
 
 	s.mu.Lock()
 	old := s.book
-	s.book, s.bookID = b, id
+	s.book, s.bookID, s.bookPath = b, id, path
 	s.mu.Unlock()
 	if old != nil {
 		old.Close()
@@ -74,7 +87,34 @@ func (s *ReaderService) OpenPath(path string) (*BookInfo, error) {
 		RTL:        b.RTL,
 		Spreads:    book.BuildSpreads(b.PageCount(), b.CoverIndex, b.Wide),
 		Metadata:   b.Metadata,
+		StartPage:  start,
 	}, nil
+}
+
+// ViewSettings returns the saved toolbar settings.
+func (s *ReaderService) ViewSettings() settings.View {
+	return s.settings.View()
+}
+
+// SaveViewSettings saves the toolbar settings.
+func (s *ReaderService) SaveViewSettings(v settings.View) {
+	if err := s.settings.SetView(v); err != nil {
+		log.Printf("saving settings: %v", err)
+	}
+}
+
+// SavePosition records the page reached in the open book, if bookID is still
+// the open book.
+func (s *ReaderService) SavePosition(bookID string, page int) {
+	s.mu.RLock()
+	path, current := s.bookPath, bookID == s.bookID
+	s.mu.RUnlock()
+	if !current {
+		return
+	}
+	if err := s.settings.SetPosition(path, page); err != nil {
+		log.Printf("saving reading position: %v", err)
+	}
 }
 
 // Version returns the app version.

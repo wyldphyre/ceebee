@@ -83,6 +83,9 @@ async function render(atEnd = false) {
     const all = views();
     const pages = all[viewIndex];
     updateToolbar();
+    // Save the reading position. Reaching the last view counts as finishing
+    // the book, so it opens at the start next time.
+    ReaderService.SavePosition(book!.bookId, viewIndex === all.length - 1 ? 0 : pages[0]);
 
     const loaded = await Promise.all(pages.map((i) => loadImage(pageURL(i))));
     if (token !== renderToken) return;
@@ -242,7 +245,7 @@ function nearestStop(stops: Stop[]): number {
 function setBook(info: BookInfo) {
     book = info;
     rtl = info.rtl;
-    viewIndex = 0;
+    viewIndex = Math.max(0, views().findIndex((v) => v.includes(info.startPage)));
     images = new Map();
     hideError();
     emptyEl.hidden = true;
@@ -302,6 +305,7 @@ layoutButtons.forEach((b) => b.addEventListener("click", () => {
     const page = views()[viewIndex][0];
     twoPage = wantTwoPage;
     viewIndex = views().findIndex((v) => v.includes(page));
+    saveViewSettings();
     render();
 }));
 
@@ -313,6 +317,7 @@ directionButtons.forEach((b) => b.addEventListener("click", () => {
 
 scaleButtons.forEach((b) => b.addEventListener("click", () => {
     scaleMode = b.dataset.scale as ScaleMode;
+    saveViewSettings();
     updateToolbar();
     layout();
     showStop(0, false);
@@ -320,6 +325,7 @@ scaleButtons.forEach((b) => b.addEventListener("click", () => {
 
 progressButton.addEventListener("click", () => {
     showProgress = !showProgress;
+    saveViewSettings();
     updateToolbar();
     layout();
     stopIndex = -1;
@@ -377,8 +383,19 @@ ReaderService.Version().then((v) => {
 
 Events.On("open-file", (e) => open(() => ReaderService.OpenPath(e.data)));
 
-ReaderService.StartupPath().then((path) => {
-    if (path) open(() => ReaderService.OpenPath(path));
-});
+function saveViewSettings() {
+    ReaderService.SaveViewSettings({twoPage, scaleMode, showProgress});
+}
 
+// Restore the saved settings before opening any startup file.
 updateToolbar();
+ReaderService.ViewSettings().then((view) => {
+    twoPage = view.twoPage;
+    showProgress = view.showProgress;
+    if (["window", "width", "original"].includes(view.scaleMode)) {
+        scaleMode = view.scaleMode as ScaleMode;
+    }
+    updateToolbar();
+}).finally(() => ReaderService.StartupPath().then((path) => {
+    if (path) open(() => ReaderService.OpenPath(path));
+}));
