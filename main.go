@@ -18,13 +18,14 @@ var appIcon []byte
 
 // version is the app version. Keep it in step with info.version in
 // build/config.yml and the platform files generated from it.
-const version = "0.5.1"
+const version = "0.6.0"
 
 const repoURL = "https://github.com/wyldphyre/ceebee"
 
 func init() {
-	// Sent with the path of a file dropped onto the window.
-	application.RegisterEvent[string]("file-dropped")
+	// Sent with the path of a file to open: dropped onto the window, or
+	// opened from the OS (for example double-clicked in Finder).
+	application.RegisterEvent[string]("open-file")
 	// Sent when About CeeBee is chosen from the menu.
 	application.RegisterEvent[application.Void]("show-about")
 }
@@ -63,8 +64,14 @@ func main() {
 
 	window.OnWindowEvent(events.Common.WindowFilesDropped, func(e *application.WindowEvent) {
 		if files := e.Context().DroppedFiles(); len(files) > 0 {
-			app.Event.Emit("file-dropped", files[0])
+			app.Event.Emit("open-file", files[0])
 		}
+	})
+
+	// macOS sends files opened from Finder as an event, whether or not the app
+	// is already running. Windows and Linux pass them on the command line.
+	app.Event.OnApplicationEvent(events.Common.ApplicationOpenedWithFile, func(e *application.ApplicationEvent) {
+		reader.openFromOS(e.Context().Filename())
 	})
 
 	if err := app.Run(); err != nil {

@@ -22,7 +22,7 @@ Unicode true
 ## !define INFO_PROJECTNAME    "my-project" # Default "ceebee"
 ## !define INFO_COMPANYNAME    "My Company" # Default "Craig Reynolds"
 ## !define INFO_PRODUCTNAME    "My Product Name" # Default "CeeBee"
-## !define INFO_PRODUCTVERSION "1.0.0"     # Default "0.5.1"
+## !define INFO_PRODUCTVERSION "1.0.0"     # Default "0.6.0"
 ## !define INFO_COPYRIGHT      "(c) Now, My Company" # Default "© 2026 Craig Reynolds"
 ###
 ## !define PRODUCT_EXECUTABLE  "Application.exe"      # Default "${INFO_PROJECTNAME}.exe"

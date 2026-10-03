@@ -14,7 +14,7 @@
     !define INFO_PRODUCTNAME "CeeBee"
 !endif
 !ifndef INFO_PRODUCTVERSION
-    !define INFO_PRODUCTVERSION "0.5.1"
+    !define INFO_PRODUCTVERSION "0.6.0"
 !endif
 !ifndef INFO_COPYRIGHT
     !define INFO_COPYRIGHT "© 2026 Craig Reynolds"
@@ -229,10 +229,34 @@ RequestExecutionLevel "${REQUEST_EXECUTION_LEVEL}"
 !macro wails.associateFiles
     ; Create file associations
     
+    !insertmacro APP_ASSOCIATE "cbz" "CBZ Comic Book" "Comic Book Archive (ZIP)" "$INSTDIR\icon.ico" "Open with ${INFO_PRODUCTNAME}" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
+    File "..\icon.ico"
+    
+    !insertmacro APP_ASSOCIATE "cbr" "CBR Comic Book" "Comic Book Archive (RAR)" "$INSTDIR\icon.ico" "Open with ${INFO_PRODUCTNAME}" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
+    File "..\icon.ico"
+    
+    !insertmacro APP_ASSOCIATE "cb7" "CB7 Comic Book" "Comic Book Archive (7z)" "$INSTDIR\icon.ico" "Open with ${INFO_PRODUCTNAME}" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
+    File "..\icon.ico"
+    
+    !insertmacro APP_ASSOCIATE "cbt" "CBT Comic Book" "Comic Book Archive (TAR)" "$INSTDIR\icon.ico" "Open with ${INFO_PRODUCTNAME}" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
+    File "..\icon.ico"
+    
 !macroend
 
 !macro wails.unassociateFiles
     ; Delete app associations
+    
+    !insertmacro APP_UNASSOCIATE "cbz" "CBZ Comic Book"
+    Delete "$INSTDIR\icon.ico"
+    
+    !insertmacro APP_UNASSOCIATE "cbr" "CBR Comic Book"
+    Delete "$INSTDIR\icon.ico"
+    
+    !insertmacro APP_UNASSOCIATE "cb7" "CB7 Comic Book"
+    Delete "$INSTDIR\icon.ico"
+    
+    !insertmacro APP_UNASSOCIATE "cbt" "CBT Comic Book"
+    Delete "$INSTDIR\icon.ico"
     
 !macroend
 

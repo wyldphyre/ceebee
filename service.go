@@ -31,6 +31,10 @@ type ReaderService struct {
 	mu     sync.RWMutex
 	book   *book.Book
 	bookID string
+
+	// A file the OS asked us to open before the frontend was ready for it.
+	pendingPath   string
+	frontendReady bool
 }
 
 // OpenDialog shows the native file dialog and opens the chosen book. It
@@ -78,14 +82,37 @@ func (s *ReaderService) Version() string {
 	return version
 }
 
-// StartupPath returns the file path passed on the command line, if any.
+// StartupPath returns the file to open when the frontend starts: one the OS
+// asked to open while it was loading, or else one passed on the command line.
 func (s *ReaderService) StartupPath() string {
+	s.mu.Lock()
+	s.frontendReady = true
+	path := s.pendingPath
+	s.pendingPath = ""
+	s.mu.Unlock()
+	if path != "" {
+		return path
+	}
 	for _, arg := range os.Args[1:] {
 		if !strings.HasPrefix(arg, "-") {
 			return arg
 		}
 	}
 	return ""
+}
+
+// openFromOS opens a file the OS asked us to open, such as one double-clicked
+// in Finder. Before the frontend has started, it is held for StartupPath.
+func (s *ReaderService) openFromOS(path string) {
+	s.mu.Lock()
+	ready := s.frontendReady
+	if !ready {
+		s.pendingPath = path
+	}
+	s.mu.Unlock()
+	if ready {
+		s.app.Event.Emit("open-file", path)
+	}
 }
 
 // pageMiddleware serves /book/{bookID}/page/{index} from the open book.

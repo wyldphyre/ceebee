@@ -375,7 +375,7 @@ ReaderService.Version().then((v) => {
     document.getElementById("about-version")!.textContent = `Version ${v}`;
 });
 
-Events.On("file-dropped", (e) => open(() => ReaderService.OpenPath(e.data)));
+Events.On("open-file", (e) => open(() => ReaderService.OpenPath(e.data)));
 
 ReaderService.StartupPath().then((path) => {
     if (path) open(() => ReaderService.OpenPath(path));
