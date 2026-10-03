@@ -18,7 +18,7 @@ var appIcon []byte
 
 // version is the app version. Keep it in step with info.version in
 // build/config.yml and the platform files generated from it.
-const version = "0.5.0"
+const version = "0.5.1"
 
 const repoURL = "https://github.com/wyldphyre/ceebee"
 

@@ -79,6 +79,12 @@ body {
     margin: auto;
 }
 
+/* Before a book is open, the empty spread would share the centring space
+   with the "Open a comic" message and push it off centre. */
+.spread:empty {
+    display: none;
+}
+
 .spread.rtl {
     flex-direction: row-reverse;
 }
