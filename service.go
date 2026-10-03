@@ -15,12 +15,13 @@ import (
 
 // BookInfo describes the open book to the frontend.
 type BookInfo struct {
-	BookID     string  `json:"bookId"`
-	Title      string  `json:"title"`
-	PageCount  int     `json:"pageCount"`
-	CoverIndex int     `json:"coverIndex"`
-	RTL        bool    `json:"rtl"`
-	Spreads    [][]int `json:"spreads"` // two-page mode spreads
+	BookID     string       `json:"bookId"`
+	Title      string       `json:"title"`
+	PageCount  int          `json:"pageCount"`
+	CoverIndex int          `json:"coverIndex"`
+	RTL        bool         `json:"rtl"`
+	Spreads    [][]int      `json:"spreads"`  // two-page mode spreads
+	Metadata   []book.Field `json:"metadata"` // ComicInfo.xml fields, if any
 }
 
 // ReaderService holds the open book and serves its pages.
@@ -68,7 +69,13 @@ func (s *ReaderService) OpenPath(path string) (*BookInfo, error) {
 		CoverIndex: b.CoverIndex,
 		RTL:        b.RTL,
 		Spreads:    book.BuildSpreads(b.PageCount(), b.CoverIndex, b.Wide),
+		Metadata:   b.Metadata,
 	}, nil
+}
+
+// Version returns the app version.
+func (s *ReaderService) Version() string {
+	return version
 }
 
 // StartupPath returns the file path passed on the command line, if any.

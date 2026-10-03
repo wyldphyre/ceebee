@@ -1,4 +1,4 @@
-import {Events, Window} from "@wailsio/runtime";
+import {Browser, Events, Window} from "@wailsio/runtime";
 import {ReaderService, type BookInfo} from "../bindings/ceebee";
 import "./style.css";
 
@@ -19,6 +19,10 @@ const emptyEl = document.getElementById("empty")!;
 const errorEl = document.getElementById("error")!;
 const errorMessageEl = document.getElementById("error-message")!;
 const progressEl = document.getElementById("progress")!;
+const infoButton = document.getElementById("info-toggle") as HTMLButtonElement;
+const infoEl = document.getElementById("info")!;
+const infoListEl = document.getElementById("info-list")!;
+const aboutEl = document.getElementById("about") as HTMLDialogElement;
 const progressFillEl = document.getElementById("progress-fill")!;
 
 // A page shown in the current view, with its natural size.
@@ -31,6 +35,7 @@ let book: BookInfo | null = null;
 let twoPage = true;
 let rtl = false;
 let showProgress = true;
+let showInfo = false;
 let scaleMode: ScaleMode = "window";
 let viewIndex = 0;
 let slots: Slot[] = [];
@@ -140,6 +145,10 @@ function updateToolbar() {
     spreadEl.classList.toggle("rtl", rtl);
     progressEl.classList.toggle("rtl", rtl);
     progressEl.hidden = !book || !showProgress;
+    const hasInfo = (book?.metadata?.length ?? 0) > 0;
+    infoButton.disabled = !hasInfo;
+    infoButton.setAttribute("aria-pressed", String(hasInfo && showInfo));
+    infoEl.hidden = !(hasInfo && showInfo);
     if (!book) {
         indicatorEl.textContent = "";
         return;
@@ -238,9 +247,33 @@ function setBook(info: BookInfo) {
     hideError();
     emptyEl.hidden = true;
     titleEl.textContent = info.title;
+    infoListEl.replaceChildren(...(info.metadata ?? []).flatMap((field) => {
+        const dt = document.createElement("dt");
+        dt.textContent = fieldLabel(field.name);
+        const dd = document.createElement("dd");
+        dd.textContent = field.value;
+        return [dt, dd];
+    }));
     document.title = `${info.title} — ${APP_TITLE}`;
     Window.SetTitle(document.title);
     render();
+}
+
+// Spaces out ComicInfo element names: "StoryArc" becomes "Story Arc".
+function fieldLabel(name: string): string {
+    return name.replace(/([a-z])([A-Z])/g, "$1 $2");
+}
+
+function toggleInfo() {
+    if (!book?.metadata?.length) return;
+    showInfo = !showInfo;
+    updateToolbar();
+    layout();
+    stopIndex = -1;
+}
+
+function showAbout() {
+    if (!aboutEl.open) aboutEl.showModal();
 }
 
 async function open(load: () => Promise<BookInfo | null>) {
@@ -298,6 +331,12 @@ document.getElementById("error-close")!.addEventListener("click", hideError);
 document.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => b.blur()));
 
 window.addEventListener("keydown", (e) => {
+    if (aboutEl.open) return;
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "i") {
+        e.preventDefault();
+        toggleInfo();
+        return;
+    }
     switch (e.key) {
         case " ":
             e.preventDefault();
@@ -322,6 +361,19 @@ window.addEventListener("resize", () => {
 // Scrolling by hand means Space continues from the nearest stop.
 readerEl.addEventListener("wheel", () => stopIndex = -1, {passive: true});
 readerEl.addEventListener("pointerdown", () => stopIndex = -1);
+
+infoButton.addEventListener("click", toggleInfo);
+Events.On("show-about", showAbout);
+
+const aboutLink = document.getElementById("about-link") as HTMLAnchorElement;
+aboutLink.addEventListener("click", (e) => {
+    e.preventDefault();
+    Browser.OpenURL(aboutLink.href);
+});
+
+ReaderService.Version().then((v) => {
+    document.getElementById("about-version")!.textContent = `Version ${v}`;
+});
 
 Events.On("file-dropped", (e) => open(() => ReaderService.OpenPath(e.data)));
 

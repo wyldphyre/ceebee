@@ -1,6 +1,9 @@
 package book
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestMangaValues(t *testing.T) {
 	for manga, want := range map[string]bool{
@@ -77,5 +80,36 @@ func TestTitle(t *testing.T) {
 		if got := ci.TitleOr("file"); got != c.want {
 			t.Errorf("%s: got %q, want %q", c.xml, got, c.want)
 		}
+	}
+}
+
+func TestParseMetadata(t *testing.T) {
+	fields, err := ParseMetadata([]byte(`<?xml version="1.0"?>
+<ComicInfo>
+  <Title>Okitsushima</Title>
+  <Series>Umi no Misaki</Series>
+  <Number></Number>
+  <Summary>
+    Line one.
+    Line two.
+  </Summary>
+  <Pages><Page Image="0" Type="FrontCover"/></Pages>
+  <Manga>YesAndRightToLeft</Manga>
+</ComicInfo>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Field{
+		{"Title", "Okitsushima"},
+		{"Series", "Umi no Misaki"},
+		{"Summary", "Line one.\n    Line two."},
+		{"Manga", "YesAndRightToLeft"},
+	}
+	if !reflect.DeepEqual(fields, want) {
+		t.Errorf("got %q, want %q", fields, want)
+	}
+
+	if _, err := ParseMetadata([]byte("<ComicInfo><Title>")); err == nil {
+		t.Error("expected parse error")
 	}
 }
