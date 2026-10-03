@@ -1,6 +1,5 @@
 # To Do List
 
-- When the app opens, the "open or drop" message isn't centred
 - Remember settings
   - Ideally in a local user profile location of some kind that is appropriate to the operating system the app is running on
   - Add the option to remember the position of a file so reading can be resumed from there when the file is next opened

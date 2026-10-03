@@ -17,7 +17,7 @@
         PackageDisplayName="CeeBee"
         PublisherName="CN=Craig Reynolds"
         PublisherDisplayName="Craig Reynolds"
-        Version="0.5.0.0"
+        Version="0.5.1.0"
         PackageDescription="Comic book reader">
         <Capabilities>
             <Capability Name="runFullTrust" />
