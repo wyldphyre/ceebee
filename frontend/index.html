@@ -6,25 +6,28 @@
     <title>Comic Reader</title>
 </head>
 <body data-file-drop-target>
-<header class="toolbar">
-    <button id="open" type="button">Open</button>
+<header id="toolbar" class="toolbar">
+    <button id="open" type="button" class="text-button" title="Open a comic">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.75 4.25v8a1 1 0 0 0 1 1h10.5a1 1 0 0 0 1-1v-6.5a1 1 0 0 0-1-1H8L6.5 3.25H2.75a1 1 0 0 0-1 1z"/></svg>Open
+    </button>
     <span id="title" class="title"></span>
     <span id="indicator" class="indicator"></span>
-    <span class="segmented">
-        <button type="button" data-pages="1" aria-pressed="false" disabled>1 Page</button>
-        <button type="button" data-pages="2" aria-pressed="true" disabled>2 Pages</button>
+    <span class="segmented" role="group" aria-label="Page layout">
+        <button type="button" data-pages="1" aria-pressed="false" title="One page" aria-label="One page" disabled><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="4.25" y="2.25" width="7.5" height="11.5" rx="1"/></svg></button>
+        <button type="button" data-pages="2" aria-pressed="true" title="Two pages" aria-label="Two pages" disabled><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.25" y="2.75" width="6.25" height="10.5" rx="1"/><rect x="8.5" y="2.75" width="6.25" height="10.5" rx="1"/></svg></button>
     </span>
-    <span class="segmented">
-        <button type="button" data-direction="ltr" aria-pressed="true" disabled>LTR</button>
-        <button type="button" data-direction="rtl" aria-pressed="false" disabled>RTL</button>
+    <span class="segmented" role="group" aria-label="Reading direction">
+        <button type="button" data-direction="ltr" aria-pressed="true" title="Left to right" aria-label="Left to right" disabled><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 8h10.5M9.5 4.5 13 8l-3.5 3.5"/></svg></button>
+        <button type="button" data-direction="rtl" aria-pressed="false" title="Right to left" aria-label="Right to left" disabled><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8H3M6.5 4.5 3 8l3.5 3.5"/></svg></button>
     </span>
-    <span class="segmented">
-        <button type="button" data-scale="window" aria-pressed="true">Scale to Window</button>
-        <button type="button" data-scale="width" aria-pressed="false">Scale to Width</button>
-        <button type="button" data-scale="original" aria-pressed="false">Original Size</button>
+    <span class="segmented" role="group" aria-label="Scaling">
+        <button type="button" data-scale="window" aria-pressed="true" title="Scale to window" aria-label="Scale to window"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.75" y="2.25" width="12.5" height="11.5" rx="1"/><rect x="5.5" y="4.25" width="5" height="7.5" rx=".5"/></svg></button>
+        <button type="button" data-scale="width" aria-pressed="false" title="Scale to width" aria-label="Scale to width"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.75 3v10M14.25 3v10M4.25 8h7.5M6.25 6l-2 2 2 2M9.75 6l2 2-2 2"/></svg></button>
+        <button type="button" data-scale="original" aria-pressed="false" title="Original size" aria-label="Original size"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.25 5.5 5 4.25v7.5M10.75 5.5l1.75-1.25v7.5"/><path d="M8 6.25v.01M8 9.75v.01" stroke-width="2"/></svg></button>
     </span>
-    <button id="progress-toggle" type="button" aria-pressed="true">Progress</button>
-    <button id="info-toggle" type="button" aria-pressed="false" title="Show metadata (⌘I / Ctrl+I)" disabled>Info</button>
+    <span class="divider"></span>
+    <button id="progress-toggle" type="button" class="toggle" aria-pressed="true" title="Progress bar" aria-label="Progress bar"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.75" y="6" width="12.5" height="4" rx="2"/><path d="M3.75 8h4" stroke-width="2"/></svg></button>
+    <button id="info-toggle" type="button" class="toggle" aria-pressed="false" title="Info" aria-label="Info" disabled><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M8 7.25v4M8 4.75v.01"/></svg></button>
 </header>
 <div class="content">
 <main id="reader" class="reader">

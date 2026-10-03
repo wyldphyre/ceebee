@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -95,5 +96,28 @@ func TestPrune(t *testing.T) {
 	}
 	if _, ok := s.Position(fmt.Sprintf("/book%d.cbz", maxPositions)); !ok {
 		t.Error("the newest position should be kept")
+	}
+}
+
+func TestRecent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	s := Load(path)
+	for i := 0; i < maxRecent+2; i++ {
+		s.AddRecent(fmt.Sprintf("/book%d.cbz", i))
+	}
+	s.AddRecent("/book5.cbz") // reopening moves it to the top
+
+	got := Load(path).Recent()
+	want := []string{"/book5.cbz", "/book11.cbz", "/book10.cbz", "/book9.cbz", "/book8.cbz",
+		"/book7.cbz", "/book6.cbz", "/book4.cbz", "/book3.cbz", "/book2.cbz"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Recent = %v, want %v", got, want)
+	}
+
+	if err := s.ClearRecent(); err != nil {
+		t.Fatal(err)
+	}
+	if got := Load(path).Recent(); len(got) != 0 {
+		t.Errorf("after ClearRecent: %v", got)
 	}
 }

@@ -25,11 +25,37 @@ Yes, this was written with Claude. No, I don't feel especially proud of that. I 
 - **Scaling:** scale to window, scale to width, or original size.
 - **Auto-scrolling:** when a view doesn't fit on screen, Space steps through it in reading order before turning the page.
 - **Progress bar:** a slim bar along the bottom of the window, which can be toggled off.
-- **Metadata panel:** a side panel listing the book's ComicInfo.xml fields, such as writer, publisher and summary.
+- **Metadata panel:** a side panel listing the book's ComicInfo.xml fields, such as writer, publisher and summary. Open it with the Info button, View › Show Info or Cmd+I (Ctrl+I).
 - **Remembers your settings:** page layout, scaling and the progress bar are restored at startup, and with File › Remember Reading Position on (the default) each book reopens where you left off.
-- **Opening books:** use the Open button, drag a file onto the window, or pass a path on the command line.
+- **Opening books:** use the Open button or File › Open…, pick from File › Open Recent (the last 10 books), drag a file onto the window, open a comic from Finder or Explorer, or pass a path on the command line. CeeBee can be set as the default app for comic files.
+- **Show in Finder/Explorer:** File › Show in Finder (Show in Explorer on Windows, Show in File Manager on Linux) reveals the open book's file.
+- **Hideable toolbar:** View › Show Toolbar hides the toolbar for distraction-free reading. It always comes back the next time CeeBee starts.
+
+## Using CeeBee
+
+### Making CeeBee the default comic reader
+
+CeeBee registers itself for `.cbz`, `.cbr`, `.cb7` and `.cbt` files.
+
+- **macOS:** open the app once (or move it to `/Applications`) so macOS learns which files it handles. Then select a comic file in Finder, choose File › Get Info, pick CeeBee under "Open with", and click **Change All…**.
+- **Windows:** the installer registers the file types. The standalone `.exe` doesn't, but you can still choose it with "Open with".
+- **Linux:** the `.deb`, `.rpm` and AppImage packages declare the comic file types, so CeeBee appears in your desktop's "Open with" list.
+
+### Where settings are kept
+
+Settings and reading positions are saved in `settings.json` in your user settings folder:
+
+| Platform | Location |
+|---|---|
+| macOS | `~/Library/Application Support/CeeBee/` |
+| Windows | `%AppData%\CeeBee\` |
+| Linux | `~/.config/CeeBee/` |
+
+Reading positions are kept for the 500 most recently read books, looked up by file path, so a book that is moved or renamed starts from the beginning again. Reaching the end of a book resets its position, so it opens at the start next time. Turning off File › Remember Reading Position also forgets all saved positions.
 
 ## Keyboard shortcuts
+
+Every shortcut also has a menu item: reading keys are in the Go menu, and the others are in the File and View menus.
 
 | Key | Left-to-right | Right-to-left |
 |---|---|---|
@@ -37,10 +63,16 @@ Yes, this was written with Claude. No, I don't feel especially proud of that. I 
 | Shift+Space | Previous (scrolls first if needed) | Previous (scrolls first if needed) |
 | → | Next view | Previous view |
 | ← | Previous view | Next view |
+| Home, or Cmd+↑ on a Mac | First view | First view |
+| End, or Cmd+↓ on a Mac | Last view | Last view |
 
 The arrow keys follow the page visually: in right-to-left mode, ← moves forward. They always turn the page straight away, without scrolling.
 
-Cmd+I (Ctrl+I on Windows and Linux) shows or hides the metadata panel.
+| Key | Action |
+|---|---|
+| Cmd+O (Ctrl+O on Windows and Linux) | Open a comic |
+| Cmd+I (Ctrl+I) | Show or hide the metadata panel |
+| Option+Cmd+T (Ctrl+Shift+T) | Show or hide the toolbar |
 
 ## Building
 
@@ -54,6 +86,12 @@ Cmd+I (Ctrl+I on Windows and Linux) shows or hides the metadata panel.
   go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.27
   ```
 
+`go install` puts `wails3` in `~/go/bin`. If your shell can't find it, add that folder to your `PATH`, for example in `~/.zshrc`:
+
+```sh
+export PATH="$HOME/go/bin:$PATH"
+```
+
 Run `wails3 doctor` to check that your system has everything it needs. On Linux this includes the GTK and WebKitGTK development packages.
 
 ### Commands
@@ -63,6 +101,15 @@ wails3 dev        # run with live reload
 wails3 build      # build bin/CeeBee
 wails3 package    # build a distributable package (for example bin/CeeBee.app on macOS)
 ```
+
+On macOS, two more packaging tasks are available:
+
+```sh
+wails3 task darwin:package:universal    # one app for both Apple Silicon and Intel Macs
+wails3 task darwin:package:dmg          # the app in a .dmg disk image
+```
+
+The macOS app is only ad-hoc signed. Other Macs will warn that it's from an unidentified developer until it is signed with an Apple Developer ID and notarized.
 
 To open a book directly:
 
@@ -81,11 +128,11 @@ wails3 build GOOS=windows GOARCH=amd64    # bin/CeeBee.exe for x64 PCs
 wails3 build GOOS=windows GOARCH=arm64    # for ARM Windows devices
 ```
 
-Without `GOARCH`, the build uses the architecture of the machine you build on. Windows needs Microsoft's WebView2 runtime, which comes with Windows 11 and current versions of Windows 10.
+Without `GOARCH`, the build uses the architecture of the machine you build on. `wails3 package GOOS=windows` builds an installer instead, which also registers the comic file types; it needs `makensis` (`brew install makensis` on macOS). Windows needs Microsoft's WebView2 runtime, which comes with Windows 11 and current versions of Windows 10.
 
 ## Testing
 
-The archive, metadata and layout logic is covered by Go unit tests:
+The archive, metadata, layout and settings logic is covered by Go unit tests:
 
 ```sh
 go test ./book ./settings
@@ -96,8 +143,12 @@ The CBR and CB7 test fixtures in `book/testdata` are generated by `make_fixtures
 ## Project structure
 
 ```
-main.go              Wails app setup, file drop, page-serving middleware
-service.go           Methods called from the frontend: open dialog, open path
+main.go              Wails app setup, file drop and file-open events,
+                     page-serving middleware, version number
+menu.go              The application menu, including Open Recent
+reveal_*.go          Show in Finder/Explorer/File Manager for each platform
+service.go           Methods called from the frontend: opening books, settings,
+                     reading positions
 book/
   archive.go         Format detection, opening archives, page list and bytes
   comicinfo.go       ComicInfo.xml parsing
@@ -109,7 +160,8 @@ frontend/
   index.html
   src/main.ts        Reader state, rendering, scrolling, keyboard, toolbar
   src/style.css
-build/               Wails build configuration, icons and platform packaging
+build/               Wails build configuration, icons, platform packaging and
+                     file associations (build/config.yml)
 SPEC.md              The original specification
 ```
 
