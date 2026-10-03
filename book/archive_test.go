@@ -119,6 +119,9 @@ func checkFixtureBook(t *testing.T, path string, wantFormat Format) {
 	if b.Title != "Fixture" || !b.RTL || b.CoverIndex != 0 {
 		t.Errorf("metadata = %q rtl=%v cover=%d", b.Title, b.RTL, b.CoverIndex)
 	}
+	if want := []Field{{"Title", "Fixture"}, {"Manga", "YesAndRightToLeft"}}; !reflect.DeepEqual(b.Metadata, want) {
+		t.Errorf("Metadata = %q, want %q", b.Metadata, want)
+	}
 }
 
 func TestFormats(t *testing.T) {

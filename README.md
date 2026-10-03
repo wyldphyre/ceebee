@@ -25,6 +25,7 @@ Yes, this was written with Claude. No, I don't feel especially proud of that. I 
 - **Scaling:** scale to window, scale to width, or original size.
 - **Auto-scrolling:** when a view doesn't fit on screen, Space steps through it in reading order before turning the page.
 - **Progress bar:** a slim bar along the bottom of the window, which can be toggled off.
+- **Metadata panel:** a side panel listing the book's ComicInfo.xml fields, such as writer, publisher and summary.
 - **Opening books:** use the Open button, drag a file onto the window, or pass a path on the command line.
 
 ## Keyboard shortcuts
@@ -37,6 +38,8 @@ Yes, this was written with Claude. No, I don't feel especially proud of that. I 
 | ← | Previous view | Next view |
 
 The arrow keys follow the page visually: in right-to-left mode, ← moves forward. They always turn the page straight away, without scrolling.
+
+Cmd+I (Ctrl+I on Windows and Linux) shows or hides the metadata panel.
 
 ## Building
 
@@ -68,7 +71,16 @@ bin/CeeBee path/to/book.cbz
 
 ### Platforms
 
-CeeBee targets macOS, Windows and Linux. So far it has been built and tested on macOS only.
+CeeBee targets macOS, Windows and Linux. So far it has been tested on macOS and Windows.
+
+Windows builds can be cross-compiled from a Mac:
+
+```sh
+wails3 build GOOS=windows GOARCH=amd64    # bin/CeeBee.exe for x64 PCs
+wails3 build GOOS=windows GOARCH=arm64    # for ARM Windows devices
+```
+
+Without `GOARCH`, the build uses the architecture of the machine you build on. Windows needs Microsoft's WebView2 runtime, which comes with Windows 11 and current versions of Windows 10.
 
 ## Testing
 

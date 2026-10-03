@@ -24,7 +24,9 @@
         <button type="button" data-scale="original" aria-pressed="false">Original Size</button>
     </span>
     <button id="progress-toggle" type="button" aria-pressed="true">Progress</button>
+    <button id="info-toggle" type="button" aria-pressed="false" title="Show metadata (⌘I / Ctrl+I)" disabled>Info</button>
 </header>
+<div class="content">
 <main id="reader" class="reader">
     <div id="spread" class="spread"></div>
     <p id="empty" class="empty">Open a comic or drop a file here</p>
@@ -33,7 +35,21 @@
         <button id="error-close" type="button" aria-label="Dismiss">×</button>
     </div>
 </main>
+<aside id="info" class="info" hidden>
+    <h2>Info</h2>
+    <dl id="info-list"></dl>
+</aside>
+</div>
 <div id="progress" class="progress" hidden><div id="progress-fill" class="progress-fill"></div></div>
+<dialog id="about" class="about">
+    <img src="/appicon.png" alt="" width="96" height="96"/>
+    <h1>CeeBee</h1>
+    <p id="about-version" class="about-version"></p>
+    <p>A simple reader for CBZ, CBR, CB7 and CBT comic book archives.</p>
+    <p class="about-small">© 2026 Craig Reynolds · MIT License</p>
+    <p><a id="about-link" href="https://github.com/wyldphyre/ceebee">github.com/wyldphyre/ceebee</a></p>
+    <form method="dialog"><button>Close</button></form>
+</dialog>
 <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

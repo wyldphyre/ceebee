@@ -51,7 +51,8 @@ type Book struct {
 	Title      string
 	CoverIndex int
 	RTL        bool
-	Wide       []bool // per page: notably wider than a typical page
+	Wide       []bool  // per page: notably wider than a typical page
+	Metadata   []Field // ComicInfo.xml fields; nil if there is none
 
 	pages []string // entry names, sorted
 
@@ -125,6 +126,7 @@ func Open(filename string) (*Book, error) {
 	if name := findComicInfo(names); name != "" {
 		if data, err := b.read(name); err == nil {
 			info, _ = ParseComicInfo(data)
+			b.Metadata, _ = ParseMetadata(data)
 		}
 	}
 	base := strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename))
