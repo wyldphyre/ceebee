@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Name=CeeBee
+Comment=Comic book reader
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/CeeBee %u
+Terminal=false
+Type=Application
+Icon=CeeBee
+Categories=Utility;
+StartupWMClass=CeeBee
+
+ 

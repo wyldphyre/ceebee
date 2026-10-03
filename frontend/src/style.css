@@ -1,0 +1,178 @@
+* {
+    box-sizing: border-box;
+}
+
+html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background: #303030;
+    color: #ddd;
+    font: 13px system-ui, -apple-system, "Segoe UI", sans-serif;
+    user-select: none;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+}
+
+.toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 36px;
+    padding: 0 8px;
+    background: #222;
+    border-bottom: 1px solid #111;
+    flex: none;
+}
+
+.toolbar button {
+    padding: 3px 10px;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background: #3a3a3a;
+    color: inherit;
+    font: inherit;
+}
+
+.toolbar button:hover:not(:disabled) {
+    background: #474747;
+}
+
+.toolbar button:disabled {
+    opacity: 0.4;
+}
+
+.title {
+    flex: 1;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.indicator {
+    font-variant-numeric: tabular-nums;
+    color: #aaa;
+}
+
+.reader {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    overflow: auto;
+}
+
+/* Auto margins centre the spread but still let it scroll when it is larger
+   than the reading area, which flex centring would clip. */
+.spread {
+    display: flex;
+    align-items: center;
+    margin: auto;
+}
+
+.spread.rtl {
+    flex-direction: row-reverse;
+}
+
+.spread img, .placeholder {
+    display: block;
+}
+
+.placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #262626;
+    color: #888;
+}
+
+.toolbar button[aria-pressed="false"] {
+    color: #888;
+}
+
+.segmented {
+    display: flex;
+}
+
+.toolbar .segmented button {
+    border-radius: 0;
+}
+
+.toolbar .segmented button:first-child {
+    border-radius: 4px 0 0 4px;
+}
+
+.toolbar .segmented button:last-child {
+    border-radius: 0 4px 4px 0;
+}
+
+.toolbar .segmented button + button {
+    border-left: none;
+}
+
+.toolbar .segmented button[aria-pressed="true"] {
+    background: #555;
+    color: #fff;
+}
+
+.progress {
+    flex: none;
+    height: 3px;
+    background: #282828;
+}
+
+.progress[hidden] {
+    display: none;
+}
+
+.progress-fill {
+    height: 100%;
+    background: #777;
+    transition: width 0.15s ease-out;
+}
+
+.progress.rtl .progress-fill {
+    margin-left: auto;
+}
+
+.empty {
+    margin: auto;
+    color: #888;
+    font-size: 16px;
+}
+
+body.file-drop-target-active .reader {
+    outline: 2px dashed #888;
+    outline-offset: -8px;
+}
+
+.error {
+    position: fixed;
+    top: 52px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    max-width: 80%;
+    padding: 8px 12px;
+    background: #5a2626;
+    border: 1px solid #823838;
+    border-radius: 4px;
+    color: #fff;
+}
+
+.error[hidden] {
+    display: none;
+}
+
+.error button {
+    border: none;
+    background: none;
+    color: inherit;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+}
