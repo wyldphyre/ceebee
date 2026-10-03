@@ -10,7 +10,7 @@
   <Identity 
     Name="com.wyldphyre.ceebee"
     Publisher="CN=Craig Reynolds"
-    Version="0.5.1.0" 
+    Version="0.6.0.0" 
     ProcessorArchitecture="arm64" />
   
   <Properties>
