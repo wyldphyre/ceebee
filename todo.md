@@ -1,11 +1,10 @@
 # To Do List
 
-- Remember settings
-  - Ideally in a local user profile location of some kind that is appropriate to the operating system the app is running on
-  - Add the option to remember the position of a file so reading can be resumed from there when the file is next opened
 - Improve the toolbar styling
   - The styling
   - Try to add some icons to the various toolbar options
+- Add a File -> Open in Finder/Explorer/etc menu item
+- Add keyboard shortcuts for navigating to the start and end of an archive
 - Build and test:
   - Linux version
   - Windows version
