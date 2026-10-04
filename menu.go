@@ -4,6 +4,7 @@ import (
 	"log"
 	"path/filepath"
 	"runtime"
+	"sync"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -16,6 +17,11 @@ type menus struct {
 	app    *application.App
 	reader *ReaderService
 	window *application.WebviewWindow
+
+	// mu serialises changes to the menus once the app is running. They come
+	// from menu clicks, opening books and frontend events, each on its own
+	// goroutine, and Wails' menus aren't safe to change concurrently.
+	mu sync.Mutex
 
 	menu       *application.Menu
 	context    *application.ContextMenu
@@ -118,10 +124,12 @@ func (m *menus) addViewItems(menu *application.Menu) {
 		SetAccelerator(toolbarAccelerator()).
 		OnClick(func(ctx *application.Context) {
 			visible := ctx.ClickedMenuItem().Checked()
+			m.mu.Lock()
 			for _, item := range m.showToolbar {
 				item.SetChecked(visible)
 			}
 			m.redraw()
+			m.mu.Unlock()
 			m.app.Event.Emit("show-toolbar", visible)
 		}))
 	// The frontend replies with the panel's new state, which setInfoState
@@ -171,12 +179,14 @@ func (m *menus) fillRecent() {
 		if err := m.reader.settings.ClearRecent(); err != nil {
 			log.Printf("saving recent files: %v", err)
 		}
-		m.refresh()
+		m.recentChanged()
 	})
 }
 
 // bookOpened updates the menu items that depend on the open book.
 func (m *menus) bookOpened() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.showInFile.SetEnabled(true)
 	for _, item := range m.goItems {
 		item.SetEnabled(true)
@@ -186,20 +196,30 @@ func (m *menus) bookOpened() {
 
 // setInfoState updates Show Info in both menus to match the Info panel.
 func (m *menus) setInfoState(s InfoState) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	for _, item := range m.showInfo {
 		item.SetEnabled(s.Available).SetChecked(s.Visible)
 	}
 	m.redraw()
 }
 
-// refresh rebuilds the recent list and redraws the menu.
+// recentChanged shows a change to the recently opened list.
+func (m *menus) recentChanged() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.refresh()
+}
+
+// refresh rebuilds the recent list and redraws the menu. The caller holds m.mu.
 func (m *menus) refresh() {
 	m.fillRecent()
 	m.redraw()
 }
 
 // redraw shows menu changes. On Windows and Linux the window holds its own
-// copy of the application menu, so it is given the updated one.
+// copy of the application menu, so it is given the updated one. The caller
+// holds m.mu.
 func (m *menus) redraw() {
 	m.menu.Update()
 	m.context.Update()

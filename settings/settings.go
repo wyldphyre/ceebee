@@ -157,6 +157,20 @@ func (s *Store) AddRecent(book string) error {
 	return s.save()
 }
 
+// RemoveRecent drops a book from the recently opened list.
+func (s *Store) RemoveRecent(book string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	recent := s.data.Recent[:0]
+	for _, b := range s.data.Recent {
+		if b != book {
+			recent = append(recent, b)
+		}
+	}
+	s.data.Recent = recent
+	return s.save()
+}
+
 // ClearRecent empties the recently opened list.
 func (s *Store) ClearRecent() error {
 	s.mu.Lock()

@@ -15,7 +15,7 @@ func reveal(path string) error {
 		"--type=method_call", "/org/freedesktop/FileManager1",
 		"org.freedesktop.FileManager1.ShowItems", "array:string:"+uri, "string:").Run()
 	if err != nil {
-		return exec.Command("xdg-open", filepath.Dir(path)).Start()
+		return startAndForget(exec.Command("xdg-open", filepath.Dir(path)))
 	}
 	return nil
 }

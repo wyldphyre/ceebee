@@ -114,6 +114,14 @@ func TestRecent(t *testing.T) {
 		t.Errorf("Recent = %v, want %v", got, want)
 	}
 
+	if err := s.RemoveRecent("/book9.cbz"); err != nil {
+		t.Fatal(err)
+	}
+	want = append(want[:3], want[4:]...)
+	if got := Load(path).Recent(); !reflect.DeepEqual(got, want) {
+		t.Errorf("after RemoveRecent: %v, want %v", got, want)
+	}
+
 	if err := s.ClearRecent(); err != nil {
 		t.Fatal(err)
 	}

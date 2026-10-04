@@ -7,6 +7,7 @@ require (
 	github.com/nwaples/rardecode/v2 v2.4.1
 	github.com/wailsapp/wails/v3 v3.0.0-beta.27
 	golang.org/x/image v0.46.0
+	golang.org/x/text v0.42.0
 )
 
 require (
@@ -27,5 +28,4 @@ require (
 	github.com/ulikunitz/xz v0.5.15 // indirect
 	go4.org v0.0.0-20260112195520-a5071408f32f // indirect
 	golang.org/x/sys v0.48.0 // indirect
-	golang.org/x/text v0.42.0 // indirect
 )

@@ -94,7 +94,9 @@ func DetectFormat(header []byte, name string) Format {
 func Open(filename string) (*Book, error) {
 	header, err := readHeader(filename)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrUnsupported, err)
+		// Both are wrapped, so callers can tell a missing file with
+		// errors.Is(err, fs.ErrNotExist).
+		return nil, fmt.Errorf("%w: %w", ErrUnsupported, err)
 	}
 
 	b := &Book{}

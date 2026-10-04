@@ -6,6 +6,9 @@ import (
 	"io"
 	"strconv"
 	"strings"
+
+	"golang.org/x/text/encoding/htmlindex"
+	"golang.org/x/text/encoding/unicode"
 )
 
 // ComicInfo holds the ComicInfo.xml fields the reader uses.
@@ -23,10 +26,36 @@ type ComicInfo struct {
 // ParseComicInfo parses ComicInfo.xml.
 func ParseComicInfo(data []byte) (*ComicInfo, error) {
 	var ci ComicInfo
-	if err := xml.Unmarshal(data, &ci); err != nil {
+	if err := newDecoder(data).Decode(&ci); err != nil {
 		return nil, err
 	}
 	return &ci, nil
+}
+
+// newDecoder returns an XML decoder that also reads ComicInfo.xml files that
+// aren't UTF-8. UTF-16 files, which start with a byte order mark, are
+// converted to UTF-8 first; other encodings named in the XML declaration,
+// such as windows-1252, are converted as they are read.
+func newDecoder(data []byte) *xml.Decoder {
+	utf16 := bytes.HasPrefix(data, []byte{0xff, 0xfe}) || bytes.HasPrefix(data, []byte{0xfe, 0xff})
+	if utf16 {
+		decoder := unicode.UTF16(unicode.BigEndian, unicode.UseBOM).NewDecoder()
+		if converted, err := decoder.Bytes(data); err == nil {
+			data = converted
+		}
+	}
+	d := xml.NewDecoder(bytes.NewReader(data))
+	d.CharsetReader = func(label string, input io.Reader) (io.Reader, error) {
+		if utf16 && strings.HasPrefix(strings.ToLower(label), "utf-16") {
+			return input, nil // already converted
+		}
+		enc, err := htmlindex.Get(label)
+		if err != nil {
+			return nil, err
+		}
+		return enc.NewDecoder().Reader(input), nil
+	}
+	return d
 }
 
 // Field is one ComicInfo.xml element, such as Writer or Summary.
@@ -39,7 +68,7 @@ type Field struct {
 // hold plain text, in file order. Elements with children, such as Pages, are
 // skipped.
 func ParseMetadata(data []byte) ([]Field, error) {
-	d := xml.NewDecoder(bytes.NewReader(data))
+	d := newDecoder(data)
 	var fields []Field
 	var text strings.Builder
 	name, depth, hasChildren := "", 0, false
@@ -97,7 +126,8 @@ func (ci *ComicInfo) Cover(pageCount int) int {
 	return 0
 }
 
-// TitleOr builds the display title, falling back to fallback.
+// TitleOr builds the display title, "{Series} #{Number} – {Title}", leaving
+// out the parts that are missing, and falling back to fallback.
 func (ci *ComicInfo) TitleOr(fallback string) string {
 	if ci == nil {
 		return fallback
@@ -105,7 +135,10 @@ func (ci *ComicInfo) TitleOr(fallback string) string {
 	series := strings.TrimSpace(ci.Series)
 	title := strings.TrimSpace(ci.Title)
 	if series != "" {
-		s := series + " #" + strings.TrimSpace(ci.Number)
+		s := series
+		if number := strings.TrimSpace(ci.Number); number != "" {
+			s += " #" + number
+		}
 		if title != "" {
 			s += " – " + title
 		}

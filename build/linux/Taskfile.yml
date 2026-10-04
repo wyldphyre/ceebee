@@ -52,6 +52,7 @@ tasks:
           DEV:
             ref: .DEV
       - task: common:generate:icons
+      - task: common:sync:build-assets
       - task: generate:dotdesktop
     preconditions:
       - sh: '{{if eq .OBFUSCATED "true"}}command -v garble >/dev/null 2>&1{{else}}true{{end}}'
@@ -76,6 +77,7 @@ tasks:
           OBFUSCATED:
             ref: .OBFUSCATED
       - task: common:generate:icons
+      - task: common:sync:build-assets
       - task: generate:dotdesktop
     preconditions:
       - sh: docker info > /dev/null 2>&1

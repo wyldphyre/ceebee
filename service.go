@@ -2,10 +2,13 @@ package main
 
 import (
 	"crypto/rand"
+	"errors"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -33,6 +36,8 @@ type ReaderService struct {
 	app      *application.App
 	settings *settings.Store
 	onOpen   func() // called after a book opens
+	// called when the recent list changes without a book opening
+	onRecentChanged func()
 
 	mu       sync.RWMutex
 	book     *book.Book
@@ -59,14 +64,18 @@ func (s *ReaderService) OpenDialog() (*BookInfo, error) {
 
 // OpenPath opens the book at path, replacing the current one.
 func (s *ReaderService) OpenPath(path string) (*BookInfo, error) {
-	b, err := book.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	id := rand.Text()
 	if abs, err := filepath.Abs(path); err == nil {
 		path = abs
 	}
+	b, err := book.Open(path)
+	if err != nil {
+		// A book that has been moved or deleted is dropped from Open Recent.
+		if errors.Is(err, fs.ErrNotExist) {
+			s.forgetRecent(path)
+		}
+		return nil, err
+	}
+	id := rand.Text()
 	start, ok := s.settings.Position(path)
 	if !ok || start < 0 || start >= b.PageCount() {
 		start = 0
@@ -97,6 +106,18 @@ func (s *ReaderService) OpenPath(path string) (*BookInfo, error) {
 		s.onOpen()
 	}
 	return info, nil
+}
+
+func (s *ReaderService) forgetRecent(path string) {
+	if !slices.Contains(s.settings.Recent(), path) {
+		return
+	}
+	if err := s.settings.RemoveRecent(path); err != nil {
+		log.Printf("saving recent files: %v", err)
+	}
+	if s.onRecentChanged != nil {
+		s.onRecentChanged()
+	}
 }
 
 // currentPath returns the open book's path, or "" if none is open.
