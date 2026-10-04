@@ -29,6 +29,7 @@ Yes, this was written with Claude. No, I don't feel especially proud of that. I 
 - **Remembers your settings:** page layout, scaling and the progress bar are restored at startup, and with File › Remember Reading Position on (the default) each book reopens where you left off.
 - **Opening books:** use the Open button or File › Open…, pick from File › Open Recent (the last 10 books), drag a file onto the window, open a comic from Finder or Explorer, or pass a path on the command line. CeeBee can be set as the default app for comic files.
 - **Show in Finder/Explorer:** File › Show in Finder (Show in Explorer on Windows, Show in File Manager on Linux) reveals the open book's file.
+- **Context menu:** right-click the page for the Go and View menus' items, such as Next Page, First Page, Show Toolbar and Show Info.
 - **Hideable toolbar:** View › Show Toolbar hides the toolbar for distraction-free reading. It always comes back the next time CeeBee starts.
 
 ## Using CeeBee
