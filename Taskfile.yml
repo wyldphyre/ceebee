@@ -32,6 +32,13 @@ tasks:
     cmds:
       - task: "{{.GOOS}}:run"
 
+  test:
+    summary: Runs the Go tests, building the frontend first because main.go embeds it
+    deps:
+      - task: common:build:frontend
+    cmds:
+      - go test ./...
+
   dev:
     summary: Runs the application in development mode
     cmds:

@@ -11,5 +11,5 @@ import (
 func reveal(path string) error {
 	cmd := exec.Command("explorer.exe")
 	cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: `explorer.exe /select,"` + path + `"`}
-	return cmd.Start()
+	return startAndForget(cmd)
 }

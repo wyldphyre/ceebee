@@ -1,5 +1,7 @@
 # Comic Reader — Specification
 
+> **This is the original brief CeeBee was first built from, kept for reference.** The app has grown beyond it since (menus, settings, scaling modes, wide pages and more), and some details have changed, such as `BuildSpreads` also taking the wide pages. See the README for what CeeBee does now.
+
 A small, cross-platform desktop reader for comic book archives. **Keep it simple:** implement only what this spec asks for, and prefer the standard library and plain code over frameworks and abstractions. The app name is `CeeBee`.
 
 ## 1. Platform and stack

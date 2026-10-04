@@ -2,13 +2,12 @@
 Version=1.0
 Name=CeeBee
 Comment=Comic book reader
-# The Exec line includes %f to pass the opened file's path to the application
-Exec=/usr/local/bin/CeeBee %f
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/CeeBee %u
 Terminal=false
 Type=Application
 Icon=CeeBee
-Categories=Graphics;Viewer;
-MimeType=application/vnd.comicbook+zip;application/vnd.comicbook-rar;application/x-cb7;application/x-cbt;
+Categories=Utility;
 StartupWMClass=CeeBee
 
  

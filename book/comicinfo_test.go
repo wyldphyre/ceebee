@@ -3,6 +3,8 @@ package book
 import (
 	"reflect"
 	"testing"
+
+	"golang.org/x/text/encoding/unicode"
 )
 
 func TestMangaValues(t *testing.T) {
@@ -69,6 +71,8 @@ func TestTitle(t *testing.T) {
 	cases := []struct{ xml, want string }{
 		{"<ComicInfo><Series>Saga</Series><Number>3</Number><Title>Part</Title></ComicInfo>", "Saga #3 – Part"},
 		{"<ComicInfo><Series>Saga</Series><Number>3</Number></ComicInfo>", "Saga #3"},
+		{"<ComicInfo><Series>Saga</Series></ComicInfo>", "Saga"},
+		{"<ComicInfo><Series>Saga</Series><Title>Part</Title></ComicInfo>", "Saga – Part"},
 		{"<ComicInfo><Title>Alone</Title></ComicInfo>", "Alone"},
 		{"<ComicInfo></ComicInfo>", "file"},
 	}
@@ -111,5 +115,42 @@ func TestParseMetadata(t *testing.T) {
 
 	if _, err := ParseMetadata([]byte("<ComicInfo><Title>")); err == nil {
 		t.Error("expected parse error")
+	}
+}
+
+func TestOtherEncodings(t *testing.T) {
+	// "Café" in windows-1252, where é is the single byte 0xe9.
+	latin1 := []byte("<?xml version=\"1.0\" encoding=\"windows-1252\"?>" +
+		"<ComicInfo><Title>Caf\xe9</Title><Manga>YesAndRightToLeft</Manga></ComicInfo>")
+
+	utf8 := "<?xml version=\"1.0\" encoding=\"utf-16\"?>" +
+		"<ComicInfo><Title>Café</Title><Manga>YesAndRightToLeft</Manga></ComicInfo>"
+	encode := func(e unicode.Endianness) []byte {
+		data, err := unicode.UTF16(e, unicode.UseBOM).NewEncoder().Bytes([]byte(utf8))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return data
+	}
+
+	cases := map[string][]byte{
+		"windows-1252":         latin1,
+		"utf-16 little-endian": encode(unicode.LittleEndian),
+		"utf-16 big-endian":    encode(unicode.BigEndian),
+		"utf-8 with BOM":       []byte("\xef\xbb\xbf<ComicInfo><Title>Café</Title><Manga>YesAndRightToLeft</Manga></ComicInfo>"),
+	}
+	for name, data := range cases {
+		ci, err := ParseComicInfo(data)
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if ci.Title != "Café" || !ci.IsRTL() {
+			t.Errorf("%s: title %q, rtl %v", name, ci.Title, ci.IsRTL())
+		}
+		fields, err := ParseMetadata(data)
+		if err != nil || len(fields) != 2 || fields[0].Value != "Café" {
+			t.Errorf("%s: metadata %q, %v", name, fields, err)
+		}
 	}
 }

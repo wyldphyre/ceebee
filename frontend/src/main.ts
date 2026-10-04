@@ -372,9 +372,10 @@ progressButton.addEventListener("click", () => {
 
 document.getElementById("error-close")!.addEventListener("click", hideError);
 
-// WebKit focuses the first button when the window becomes active, which
-// shows its focus ring. Undo that unless the user is tabbing through the
-// toolbar with the keyboard.
+// Keep toolbar buttons from holding focus, unless the user is tabbing through
+// them with the keyboard: a focused button would be pressed by Space, and
+// WebKit focuses the first button, showing its focus ring, whenever the window
+// becomes active.
 let tabbing = false;
 window.addEventListener("keydown", (e) => { if (e.key === "Tab") tabbing = true; }, true);
 window.addEventListener("pointerdown", () => tabbing = false, true);
@@ -384,16 +385,9 @@ document.addEventListener("focusin", (e) => {
     }
 });
 
-// Don't leave toolbar buttons focused, or Space would press them.
-document.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => b.blur()));
-
 window.addEventListener("keydown", (e) => {
+    // Cmd/Ctrl+I isn't handled here: View › Show Info's shortcut covers it.
     if (aboutEl.open) return;
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "i") {
-        e.preventDefault();
-        toggleInfo();
-        return;
-    }
     let action: Action | null = null;
     if (e.key === " ") action = e.shiftKey ? "previous" : "next";
     else if (e.key === "ArrowRight") action = "right";
@@ -431,7 +425,7 @@ Events.On("show-toolbar", (e) => {
 });
 
 // Add the shortcuts to the tooltips, with the platform's modifier key.
-const mod = navigator.platform.startsWith("Mac") ? "⌘" : "Ctrl+";
+const mod = navigator.userAgent.includes("Mac OS X") ? "⌘" : "Ctrl+";
 openButton.title = `Open a comic (${mod}O)`;
 infoButton.title = `Info (${mod}I)`;
 

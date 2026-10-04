@@ -235,6 +235,20 @@ tasks:
     cmds:
       - wails3 update build-assets -name "{{.APP_NAME}}" -binaryname "{{.APP_NAME}}" -config config.yml -dir .
 
+  sync:build-assets:
+    summary: >-
+      Updates the platform build files (Info.plist, Windows version info,
+      Linux package) from config.yml when it changes, so the version and
+      product details only need setting there
+    dir: build
+    run: once
+    sources:
+      - config.yml
+    cmds:
+      - wails3 update build-assets -name "{{.APP_NAME}}" -binaryname "{{.APP_NAME}}" -config config.yml -dir .
+      # The update also writes iOS project files, which CeeBee doesn't use.
+      - rm -rf ios
+
   build:server:
     summary: Builds the application in server mode (no GUI, HTTP server only)
     desc: |

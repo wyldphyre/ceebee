@@ -25,10 +25,12 @@ fi
 # The Wails tasks run wails3 by name, so make sure it's on PATH.
 export PATH="$(dirname "$WAILS"):$PATH"
 
-# The version comes from main.go, so it only needs changing in one place here.
-VERSION=$(sed -n 's/^const version = "\(.*\)"$/\1/p' main.go)
+# The version is info.version in build/config.yml, the one place it is set.
+VERSION=$(awk '/^info:/ { inside = 1; next }
+               /^[^[:space:]#]/ { inside = 0 }
+               inside && $1 == "version:" { gsub(/["\047]/, "", $2); print $2; exit }' build/config.yml)
 if [[ -z "$VERSION" ]]; then
-    echo "Couldn't read the version from main.go." >&2
+    echo "Couldn't read info.version from build/config.yml." >&2
     exit 1
 fi
 
