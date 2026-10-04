@@ -8,20 +8,29 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
-// menus is the application menu. It replaces Wails' default menu so that
-// About opens CeeBee's own dialog and Help links to the project rather than
-// the Wails website, and adds CeeBee's File and View items.
+// menus is the application menu and the reading area's context menu. The
+// application menu replaces Wails' default menu so that About opens CeeBee's
+// own dialog and Help links to the project rather than the Wails website.
+// The context menu repeats the View and Go menus' items.
 type menus struct {
 	app    *application.App
 	reader *ReaderService
 	window *application.WebviewWindow
 
 	menu       *application.Menu
+	context    *application.ContextMenu
 	recent     *application.Menu
 	showInFile *application.MenuItem
-	showInfo   *application.MenuItem
-	goItems    []*application.MenuItem
+
+	// The items that appear in both menus, so their state is kept in step.
+	showToolbar []*application.MenuItem
+	showInfo    []*application.MenuItem
+	goItems     []*application.MenuItem
 }
+
+// contextMenuName is the name the frontend's CSS uses to show the context
+// menu: --custom-contextmenu: reader.
+const contextMenuName = "reader"
 
 // InfoState is sent by the frontend when the Info panel opens or closes, or
 // a book with or without metadata opens, to keep View › Show Info in step.
@@ -78,37 +87,8 @@ func newMenus(app *application.App, reader *ReaderService) *menus {
 
 	menu.AddRole(application.EditMenu)
 
-	view := menu.AddSubmenu("View")
-	// The toolbar always starts visible, so this isn't saved in settings.
-	view.AddCheckbox("Show Toolbar", true).SetAccelerator(toolbarAccelerator()).
-		OnClick(func(ctx *application.Context) {
-			app.Event.Emit("show-toolbar", ctx.ClickedMenuItem().Checked())
-		})
-	m.showInfo = view.AddCheckbox("Show Info", false).SetAccelerator("CmdOrCtrl+I").SetEnabled(false).
-		OnClick(func(ctx *application.Context) {
-			app.Event.Emit("show-info", ctx.ClickedMenuItem().Checked())
-		})
-	view.AddSeparator()
-	view.AddRole(application.ToggleFullscreen)
-
-	// Navigation. Each item sends the same action the frontend runs for its
-	// key, so a key press does one or the other, never both: macOS and Linux
-	// give the key to the menu or the page, and on Windows plain keys like
-	// Space always go to the page.
-	goMenu := menu.AddSubmenu("Go")
-	nav := func(label, key, action string) {
-		item := goMenu.Add(label).SetAccelerator(key).SetEnabled(false).
-			OnClick(func(*application.Context) { app.Event.Emit("navigate", action) })
-		m.goItems = append(m.goItems, item)
-	}
-	nav("Next Page", "Space", "next")
-	nav("Previous Page", "Shift+Space", "previous")
-	goMenu.AddSeparator()
-	nav("Page Right", "Right", "right")
-	nav("Page Left", "Left", "left")
-	goMenu.AddSeparator()
-	nav("First Page", "Home", "first")
-	nav("Last Page", "End", "last")
+	m.addViewItems(menu.AddSubmenu("View"))
+	m.addGoItems(menu.AddSubmenu("Go"))
 
 	menu.AddRole(application.WindowMenu)
 
@@ -122,7 +102,57 @@ func newMenus(app *application.App, reader *ReaderService) *menus {
 	}
 
 	app.Menu.SetApplicationMenu(menu)
+
+	m.context = application.NewContextMenu(contextMenuName)
+	m.addGoItems(m.context.Menu)
+	m.context.AddSeparator()
+	m.addViewItems(m.context.Menu)
+	m.context.Update()
 	return m
+}
+
+// addViewItems adds the View menu's items to a menu.
+func (m *menus) addViewItems(menu *application.Menu) {
+	// The toolbar always starts visible, so this isn't saved in settings.
+	m.showToolbar = append(m.showToolbar, menu.AddCheckbox("Show Toolbar", true).
+		SetAccelerator(toolbarAccelerator()).
+		OnClick(func(ctx *application.Context) {
+			visible := ctx.ClickedMenuItem().Checked()
+			for _, item := range m.showToolbar {
+				item.SetChecked(visible)
+			}
+			m.redraw()
+			m.app.Event.Emit("show-toolbar", visible)
+		}))
+	// The frontend replies with the panel's new state, which setInfoState
+	// shows in both menus.
+	m.showInfo = append(m.showInfo, menu.AddCheckbox("Show Info", false).
+		SetAccelerator("CmdOrCtrl+I").SetEnabled(false).
+		OnClick(func(ctx *application.Context) {
+			m.app.Event.Emit("show-info", ctx.ClickedMenuItem().Checked())
+		}))
+	menu.AddSeparator()
+	menu.AddRole(application.ToggleFullscreen)
+}
+
+// addGoItems adds the Go menu's navigation items to a menu. Each item sends
+// the same action the frontend runs for its key, so a key press does one or
+// the other, never both: macOS and Linux give the key to the menu or the
+// page, and on Windows plain keys like Space always go to the page.
+func (m *menus) addGoItems(menu *application.Menu) {
+	nav := func(label, key, action string) {
+		item := menu.Add(label).SetAccelerator(key).SetEnabled(false).
+			OnClick(func(*application.Context) { m.app.Event.Emit("navigate", action) })
+		m.goItems = append(m.goItems, item)
+	}
+	nav("Next Page", "Space", "next")
+	nav("Previous Page", "Shift+Space", "previous")
+	menu.AddSeparator()
+	nav("Page Right", "Right", "right")
+	nav("Page Left", "Left", "left")
+	menu.AddSeparator()
+	nav("First Page", "Home", "first")
+	nav("Last Page", "End", "last")
 }
 
 // fillRecent lists the recently opened books in File › Open Recent.
@@ -154,9 +184,11 @@ func (m *menus) bookOpened() {
 	m.refresh()
 }
 
-// setInfoState updates View › Show Info to match the Info panel.
+// setInfoState updates Show Info in both menus to match the Info panel.
 func (m *menus) setInfoState(s InfoState) {
-	m.showInfo.SetEnabled(s.Available).SetChecked(s.Visible)
+	for _, item := range m.showInfo {
+		item.SetEnabled(s.Available).SetChecked(s.Visible)
+	}
 	m.redraw()
 }
 
@@ -167,9 +199,10 @@ func (m *menus) refresh() {
 }
 
 // redraw shows menu changes. On Windows and Linux the window holds its own
-// copy of the menu, so it is given the updated one.
+// copy of the application menu, so it is given the updated one.
 func (m *menus) redraw() {
 	m.menu.Update()
+	m.context.Update()
 	if runtime.GOOS != "darwin" && m.window != nil {
 		m.window.SetMenu(m.menu)
 	}

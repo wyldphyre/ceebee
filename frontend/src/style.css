@@ -133,6 +133,9 @@ body {
 }
 
 .reader {
+    /* Right-clicking the reading area shows the "reader" context menu built
+       in menu.go. */
+    --custom-contextmenu: reader;
     flex: 1;
     min-width: 0;
     min-height: 0;
