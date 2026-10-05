@@ -214,16 +214,30 @@ func (m *menus) recentChanged() {
 // refresh rebuilds the recent list and redraws the menu. The caller holds m.mu.
 func (m *menus) refresh() {
 	m.fillRecent()
+	if runtime.GOOS == "linux" {
+		// Only Open Recent is rebuilt on Linux; see redraw. Wails doesn't
+		// move to the main thread to rebuild a menu, and GTK must only be
+		// used from there, so InvokeSync does.
+		application.InvokeSync(m.recent.Update)
+		return
+	}
 	m.redraw()
 }
 
-// redraw shows menu changes. On Windows and Linux the window holds its own
-// copy of the application menu, so it is given the updated one. The caller
-// holds m.mu.
+// redraw shows changes to menu items' state. On Windows the window holds its
+// own copy of the application menu, so it is given the updated one. The
+// caller holds m.mu.
+//
+// On Linux, Wails keeps menu items' enabled and checked state in GTK actions,
+// so changes show without an update. Updating rebuilds the whole menu bar,
+// and doing that while GTK is using it crashes or hangs the app.
 func (m *menus) redraw() {
+	if runtime.GOOS == "linux" {
+		return
+	}
 	m.menu.Update()
 	m.context.Update()
-	if runtime.GOOS != "darwin" && m.window != nil {
+	if runtime.GOOS == "windows" && m.window != nil {
 		m.window.SetMenu(m.menu)
 	}
 }
