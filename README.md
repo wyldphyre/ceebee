@@ -10,11 +10,11 @@ Because I've long wanted a simple, effective reader that looked nice (enough), w
 
 The two apps that have come the closest over the years were CDisplay on Windows and Simple Comic on the Mac. CDisplay refused to add reading direction detection from the metadata, but was othewise everthing I needed on Windows. And Simple Comic is pretty much perfect for what I want, but only available on a Mac.
 
-So I made CeeBee. It takes inspiration from my favourite apps for reading comic archives. For it's initial implementation I like to think it has just enough of everything that I might want in a reader of this type, but the feature set might grow over time.
+So I made CeeBee. It takes inspiration from my favourite apps for reading comic archives. For it's initial implementation I like to think it has just enough of everything that I might want in a reader of this type, but the feature set might grow over time as I think of things I would actually use.
 
 ## AI?
 
-Yes, this was written with Claude. No, I don't feel especially proud of that. I used AI because, while I could have done it myself, eventually, and with vastly greater time spent, I'm lazy enought that it wouldn't have happened otherwise. I have issues with so called "AI", but it has it's uses. Scratching a development itch in a way that doesn't hurt anyone else seems like a decent use of it.
+Yes, this was written with Claude. No, I don't feel especially proud of that. I used AI because, while I could have done it myself, eventually, and with vastly greater time spent, I'm lazy enough and time poor enough that it wouldn't have happened otherwise.
 
 ## Features
 
