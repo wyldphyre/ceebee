@@ -164,6 +164,16 @@ async function fitWindow(): Promise<boolean> {
     }
 }
 
+// The largest window sizes the window manager has allowed, keyed by the
+// screen's usable area, where they are smaller than that area. Wails counts
+// the whole screen as usable on Linux, but GNOME keeps windows below its top
+// bar, so the window can end up smaller than asked for.
+const windowLimits = new Map<string, { width: number; height: number }>();
+
+// How much smaller than asked for a window can be from rounding alone, without
+// the window manager limiting it.
+const LIMIT_SLACK = 2;
+
 async function resizeToFit(): Promise<boolean> {
     const token = ++fitToken;
     if (slots.length === 0 || await Window.IsFullscreen() || await Window.IsMaximised()) return false;
@@ -180,29 +190,53 @@ async function resizeToFit(): Promise<boolean> {
         Width: screen.width / scale,
         Height: screen.height / scale,
     };
+    const workKey = `${work.X},${work.Y},${work.Width},${work.Height}`;
 
     // Everything around the reading area: the window frame and title bar,
     // the toolbar, the progress bar and the Info panel.
     const extraWidth = size.width - readerEl.clientWidth;
     const extraHeight = size.height - readerEl.clientHeight;
-    const reader = readerSize(work.Width - extraWidth, work.Height - extraHeight);
-
     // Wide enough for the whole toolbar, whose controls sit across the
     // window's inside width, which is the reading area plus the Info panel.
     const toolbarReaderWidth = toolbarWidth() - (window.innerWidth - readerEl.clientWidth);
-    const readerWidth = Math.max(reader.width, MIN_READER_WIDTH, toolbarReaderWidth);
-    const readerHeight = Math.max(reader.height, MIN_READER_HEIGHT);
-    const width = Math.round(Math.min(work.Width, readerWidth + extraWidth));
-    const height = Math.round(Math.min(work.Height, readerHeight + extraHeight));
-    // Keep the window where it is, moving it only as far as it takes to stay
-    // on screen. The size is set first: macOS keeps a window's bottom edge
-    // fixed when resizing it, so the position must be set afterwards.
-    const x = Math.round(Math.min(Math.max(position.x, work.X), work.X + work.Width - width));
-    const y = Math.round(Math.min(Math.max(position.y, work.Y), work.Y + work.Height - height));
-    if (token !== fitToken) return false; // a newer view is being fitted
-    const resized = width !== size.width || height !== size.height;
-    if (resized) await Window.SetSize(width, height);
-    if (x !== position.x || y !== position.y) await Window.SetPosition(x, y);
+
+    // Fit within the usable area, and if the window manager keeps the window
+    // smaller than that, fit again within the size it allowed.
+    let current = size;
+    let resized = false;
+    for (let attempt = 0; ; attempt++) {
+        const limit = windowLimits.get(workKey) ?? {width: work.Width, height: work.Height};
+        const reader = readerSize(limit.width - extraWidth, limit.height - extraHeight);
+        const readerWidth = Math.max(reader.width, MIN_READER_WIDTH, toolbarReaderWidth);
+        const readerHeight = Math.max(reader.height, MIN_READER_HEIGHT);
+        const width = Math.round(Math.min(limit.width, readerWidth + extraWidth));
+        const height = Math.round(Math.min(limit.height, readerHeight + extraHeight));
+        // Keep the window where it is, moving it only as far as it takes to
+        // stay on screen. The size is set first: macOS keeps a window's bottom
+        // edge fixed when resizing it, so the position must be set afterwards.
+        const x = Math.round(Math.min(Math.max(position.x, work.X), work.X + work.Width - width));
+        const y = Math.round(Math.min(Math.max(position.y, work.Y), work.Y + work.Height - height));
+        if (token !== fitToken) return false; // a newer view is being fitted
+        if (width !== current.width || height !== current.height) {
+            await ReaderService.ResizeWindow(width, height);
+            resized = true;
+            const previous = current;
+            current = await Window.Size();
+            // A window that didn't change size at all hasn't shown any limit.
+            const changed = current.width !== previous.width || current.height !== previous.height;
+            const limitWidth = current.width < width - LIMIT_SLACK;
+            const limitHeight = current.height < height - LIMIT_SLACK;
+            if (attempt === 0 && changed && (limitWidth || limitHeight)) {
+                windowLimits.set(workKey, {
+                    width: limitWidth ? current.width : limit.width,
+                    height: limitHeight ? current.height : limit.height,
+                });
+                continue;
+            }
+        }
+        if (x !== position.x || y !== position.y) await Window.SetPosition(x, y);
+        break;
+    }
     if (!resized) return false;
     // Let the page catch up with the new window size before laying it out.
     await new Promise((resolve) => requestAnimationFrame(resolve));

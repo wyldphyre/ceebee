@@ -189,6 +189,14 @@ func (s *ReaderService) WindowScreen() (*ScreenArea, error) {
 	}, nil
 }
 
+// ResizeWindow sets the window's size. The runtime's Window.SetSize can't be
+// used for this: on Linux it has no effect once the window is showing.
+func (s *ReaderService) ResizeWindow(width, height int) {
+	if s.window != nil {
+		resizeWindow(s.window, width, height)
+	}
+}
+
 // Version returns the app version.
 func (s *ReaderService) Version() string {
 	return version
