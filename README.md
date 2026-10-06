@@ -23,6 +23,7 @@ Yes, this was written with Claude. No, I don't feel especially proud of that. I 
 - **Layouts:** one page or two-page spreads. The cover is always shown on its own, and so are wide pages (for example, double-page artwork).
 - **Reading direction:** left-to-right or right-to-left, set automatically from metadata and switchable from the toolbar.
 - **Scaling:** scale to window, scale to width, or original size.
+- **Window sizing:** the window resizes to fit each view without blank space around the pages, as big as it needs to be but no bigger than the screen. It changes size only when the content's shape does, such as moving between a cover and a two-page spread. Full-screen and maximised windows are left alone.
 - **Auto-scrolling:** when a view doesn't fit on screen, Space steps through it in reading order before turning the page.
 - **Progress bar:** a slim bar along the bottom of the window, which can be toggled off.
 - **Metadata panel:** a side panel listing the book's ComicInfo.xml fields, such as writer, publisher and summary. Open it with the Info button, View › Show Info or Cmd+I (Ctrl+I).

@@ -2,7 +2,6 @@
 
 ## Planned
 
-- Make the app fill the screen (not fullscreen mode, but as big as it can be to show as much content as possible/needed)
 
 ## Potential
 
