@@ -34,6 +34,7 @@ type BookInfo struct {
 // ReaderService holds the open book and serves its pages.
 type ReaderService struct {
 	app      *application.App
+	window   *application.WebviewWindow
 	settings *settings.Store
 	onOpen   func() // called after a book opens
 	// called when the recent list changes without a book opening
@@ -151,6 +152,41 @@ func (s *ReaderService) SavePosition(bookID string, page int) {
 	if err := s.settings.SetPosition(path, page); err != nil {
 		log.Printf("saving reading position: %v", err)
 	}
+}
+
+// ScreenArea is the usable area of the screen the window is on, without the
+// menu bar, Dock or taskbar, in the units Wails reports screens in.
+type ScreenArea struct {
+	ScreenWidth int `json:"screenWidth"` // the whole screen's width
+	X           int `json:"x"`
+	Y           int `json:"y"`
+	Width       int `json:"width"`
+	Height      int `json:"height"`
+}
+
+// WindowScreen returns the usable area of the screen the window is on. The
+// runtime's Screens.GetCurrent can't be used for this: it looks up the
+// focused window, and crashes the app when there is none, such as while a
+// file is dragged in from Finder.
+func (s *ReaderService) WindowScreen() (*ScreenArea, error) {
+	if s.window == nil {
+		return nil, errors.New("no window")
+	}
+	screen, err := s.window.GetScreen()
+	if err != nil {
+		return nil, err
+	}
+	if screen == nil {
+		return nil, errors.New("the window isn't on a screen")
+	}
+	work := screen.WorkArea
+	return &ScreenArea{
+		ScreenWidth: screen.Bounds.Width,
+		X:           work.X,
+		Y:           work.Y,
+		Width:       work.Width,
+		Height:      work.Height,
+	}, nil
 }
 
 // Version returns the app version.

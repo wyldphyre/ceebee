@@ -110,14 +110,10 @@ body {
     background: #333;
 }
 
-.title {
+/* Pushes the rest of the toolbar to the right. The book's title is in the
+   window's title bar, not here, so it doesn't widen the window. */
+.spacer {
     flex: 1;
-    min-width: 0;
-    padding-left: 4px;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    color: #ddd;
 }
 
 .indicator {

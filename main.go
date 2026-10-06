@@ -76,6 +76,7 @@ func main() {
 		URL:                "/",
 	})
 	menus.window = window
+	reader.window = window
 	app.Event.On("info-state", func(e *application.CustomEvent) {
 		if s, ok := e.Data.(InfoState); ok {
 			menus.setInfoState(s)

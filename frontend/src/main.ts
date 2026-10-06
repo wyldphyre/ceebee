@@ -12,7 +12,7 @@ const layoutButtons = document.querySelectorAll<HTMLButtonElement>("button[data-
 const directionButtons = document.querySelectorAll<HTMLButtonElement>("button[data-direction]");
 const scaleButtons = document.querySelectorAll<HTMLButtonElement>("button[data-scale]");
 const progressButton = document.getElementById("progress-toggle") as HTMLButtonElement;
-const titleEl = document.getElementById("title")!;
+const spacerEl = document.getElementById("spacer")!;
 const indicatorEl = document.getElementById("indicator")!;
 const readerEl = document.getElementById("reader")!;
 const spreadEl = document.getElementById("spread")!;
@@ -47,6 +47,10 @@ type Stop = { x: number; y: number };
 
 // The scroll stop last moved to, or -1 once the reader has scrolled by hand.
 let stopIndex = 0;
+
+// Counts window fits, so that only the latest one is applied when pages are
+// turned quickly.
+let fitToken = 0;
 
 // Decoded images for the current and next views, keyed by URL.
 let images = new Map<string, Promise<HTMLImageElement | null>>();
@@ -106,6 +110,12 @@ async function render(atEnd = false) {
     next.forEach((i) => keep.add(pageURL(i)));
     images = new Map([...images].filter(([url]) => keep.has(url)));
     next.forEach((i) => loadImage(pageURL(i)));
+
+    // Fit the window to the new view. If it changed size, the pages have been
+    // laid out again, so go back to the view's first (or last) scroll stop.
+    if (await fitWindow() && token === renderToken) {
+        showStop(atEnd ? scrollStops().length - 1 : 0, false);
+    }
 }
 
 // Size the pages: either at their natural size, or scaled to fit the reading
@@ -133,6 +143,108 @@ function layout() {
     const width = readerEl.clientWidth;
     fit();
     if (readerEl.clientWidth !== width) fit();
+}
+
+// The smallest reading area the window is fitted to, so that tiny or missing
+// pages don't shrink it to almost nothing.
+const MIN_READER_WIDTH = 400;
+const MIN_READER_HEIGHT = 300;
+
+// Resizes the window to fit the current view: as big as it needs to be to
+// show the pages without blank space around them, but no bigger than the
+// screen's usable area. Full screen and maximised windows are left alone.
+// Returns whether the window changed size, after the pages have been laid out
+// to match. If anything goes wrong the window is just left as it is.
+async function fitWindow(): Promise<boolean> {
+    try {
+        return await resizeToFit();
+    } catch (err) {
+        console.warn("Couldn't fit the window:", err);
+        return false;
+    }
+}
+
+async function resizeToFit(): Promise<boolean> {
+    const token = ++fitToken;
+    if (slots.length === 0 || await Window.IsFullscreen() || await Window.IsMaximised()) return false;
+    const [size, position, screen] = await Promise.all([Window.Size(), Window.Position(), ReaderService.WindowScreen()]);
+    if (!screen) return false;
+    // Wails is meant to report screen areas in the same points as window
+    // sizes, but on macOS it reports physical pixels, so convert by the ratio
+    // of its screen width to the one the page sees, which is in points. Where
+    // Wails already uses points the ratio is 1.
+    const scale = screen.screenWidth / window.screen.width || 1;
+    const work = {
+        X: screen.x / scale,
+        Y: screen.y / scale,
+        Width: screen.width / scale,
+        Height: screen.height / scale,
+    };
+
+    // Everything around the reading area: the window frame and title bar,
+    // the toolbar, the progress bar and the Info panel.
+    const extraWidth = size.width - readerEl.clientWidth;
+    const extraHeight = size.height - readerEl.clientHeight;
+    const reader = readerSize(work.Width - extraWidth, work.Height - extraHeight);
+
+    // Wide enough for the whole toolbar, whose controls sit across the
+    // window's inside width, which is the reading area plus the Info panel.
+    const toolbarReaderWidth = toolbarWidth() - (window.innerWidth - readerEl.clientWidth);
+    const readerWidth = Math.max(reader.width, MIN_READER_WIDTH, toolbarReaderWidth);
+    const readerHeight = Math.max(reader.height, MIN_READER_HEIGHT);
+    const width = Math.round(Math.min(work.Width, readerWidth + extraWidth));
+    const height = Math.round(Math.min(work.Height, readerHeight + extraHeight));
+    // Keep the window where it is, moving it only as far as it takes to stay
+    // on screen. The size is set first: macOS keeps a window's bottom edge
+    // fixed when resizing it, so the position must be set afterwards.
+    const x = Math.round(Math.min(Math.max(position.x, work.X), work.X + work.Width - width));
+    const y = Math.round(Math.min(Math.max(position.y, work.Y), work.Y + work.Height - height));
+    if (token !== fitToken) return false; // a newer view is being fitted
+    const resized = width !== size.width || height !== size.height;
+    if (resized) await Window.SetSize(width, height);
+    if (x !== position.x || y !== position.y) await Window.SetPosition(x, y);
+    if (!resized) return false;
+    // Let the page catch up with the new window size before laying it out.
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    layout();
+    stopIndex = -1;
+    return true;
+}
+
+// The narrowest the toolbar can be with all its controls showing, or 0 if
+// the toolbar is hidden.
+function toolbarWidth(): number {
+    if (toolbarEl.hidden) return 0;
+    const style = getComputedStyle(toolbarEl);
+    const children = [...toolbarEl.children].filter((el) => el !== spacerEl);
+    const controls = children.reduce((sum, el) => sum + el.getBoundingClientRect().width, 0);
+    const gaps = parseFloat(style.columnGap) * children.length;
+    return controls + gaps + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+}
+
+// The reading area needed to show the current view with no blank space, at
+// most maxWidth by maxHeight, and never enlarging pages past their natural
+// size.
+function readerSize(maxWidth: number, maxHeight: number): { width: number; height: number } {
+    // Scaled modes show the pages at a common height; the tallest page sets
+    // the natural one.
+    const aspect = slots.reduce((sum, s) => sum + s.width / s.height, 0);
+    const naturalHeight = Math.max(...slots.map((s) => s.height));
+    switch (scaleMode) {
+        case "window": {
+            const height = Math.min(maxHeight, naturalHeight, maxWidth / aspect);
+            return {width: height * aspect, height};
+        }
+        case "width": {
+            const width = Math.min(maxWidth, naturalHeight * aspect);
+            return {width, height: Math.min(maxHeight, width / aspect)};
+        }
+        case "original":
+            return {
+                width: Math.min(maxWidth, slots.reduce((sum, s) => sum + s.width, 0)),
+                height: Math.min(maxHeight, naturalHeight),
+            };
+    }
 }
 
 function updateToolbar() {
@@ -258,7 +370,6 @@ function setBook(info: BookInfo) {
     images = new Map();
     hideError();
     emptyEl.hidden = true;
-    titleEl.textContent = info.title;
     infoListEl.replaceChildren(...(info.metadata ?? []).flatMap((field) => {
         const dt = document.createElement("dt");
         dt.textContent = fieldLabel(field.name);
@@ -360,6 +471,7 @@ scaleButtons.forEach((b) => b.addEventListener("click", () => {
     updateToolbar();
     layout();
     showStop(0, false);
+    fitWindow().then((resized) => { if (resized) showStop(0, false); });
 }));
 
 progressButton.addEventListener("click", () => {
