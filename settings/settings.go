@@ -34,8 +34,10 @@ type Position struct {
 type file struct {
 	View             View                `json:"view"`
 	RememberPosition bool                `json:"rememberPosition"`
-	Positions        map[string]Position `json:"positions"` // keyed by book path
-	Recent           []string            `json:"recent"`    // book paths, newest first
+	DetectCovers     bool                `json:"detectCovers"`  // see book.Options
+	DetectCredits    bool                `json:"detectCredits"` // see book.Options
+	Positions        map[string]Position `json:"positions"`     // keyed by book path
+	Recent           []string            `json:"recent"`        // book paths, newest first
 }
 
 // Store is the settings file, loaded into memory. It is safe for concurrent use.
@@ -106,6 +108,36 @@ func (s *Store) SetRememberPosition(on bool) error {
 	if !on {
 		s.data.Positions = map[string]Position{}
 	}
+	return s.save()
+}
+
+// DetectCovers reports whether pages named as covers are moved to the front.
+func (s *Store) DetectCovers() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.data.DetectCovers
+}
+
+// SetDetectCovers turns detecting cover pages on or off.
+func (s *Store) SetDetectCovers(on bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.data.DetectCovers = on
+	return s.save()
+}
+
+// DetectCredits reports whether pages named as credits are moved to the end.
+func (s *Store) DetectCredits() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.data.DetectCredits
+}
+
+// SetDetectCredits turns detecting credit pages on or off.
+func (s *Store) SetDetectCredits(on bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.data.DetectCredits = on
 	return s.save()
 }
 

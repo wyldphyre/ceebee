@@ -21,6 +21,7 @@ Yes, this was written with Claude. No, I don't feel especially proud of that. I 
 - **Formats:** CBZ, CBR, CB7 and CBT. The format is detected from the file's contents, so mislabelled files (such as a `.cbr` that is really a zip) still open.
 - **ComicInfo.xml:** the title, cover page and reading direction come from the archive's metadata when it is present.
 - **Layouts:** one page or two-page spreads. The cover is always shown on its own, and so are wide pages (for example, double-page artwork).
+- **Cover and credit detection:** two View menu settings, both off by default, that reorder pages by file name. **Detect Cover Images** moves files with "cover" in their name to the front, each shown on its own, when ComicInfo.xml doesn't say which page is the cover. **Detect Credit Images** moves files with "credits" in their name to the end. Changing either reopens the current book in the new order at the same page.
 - **Reading direction:** left-to-right or right-to-left, set automatically from metadata and switchable from the toolbar.
 - **Scaling:** scale to window, scale to width, or original size.
 - **Window sizing:** the window resizes to fit each view without blank space around the pages, as big as it needs to be but no bigger than the screen. It changes size only when the content's shape does, such as moving between a cover and a two-page spread. Full-screen and maximised windows are left alone.

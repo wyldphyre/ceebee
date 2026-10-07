@@ -151,3 +151,34 @@ func TestStartupPath(t *testing.T) {
 		t.Errorf("after StartupPath: pending %q, ready %v", s.pendingPath, s.frontendReady)
 	}
 }
+
+func TestReopenKeepsPage(t *testing.T) {
+	s := newTestService()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "book.cbz")
+	f, _ := os.Create(path)
+	zw := zip.NewWriter(f)
+	for _, name := range []string{"01.png", "02.png", "03.png", "zz_cover.png"} {
+		w, _ := zw.Create(name)
+		png.Encode(w, image.NewGray(image.Rect(0, 0, 20, 30)))
+	}
+	zw.Close()
+	f.Close()
+
+	if _, err := s.OpenPath(path); err != nil {
+		t.Fatal(err)
+	}
+	// Reading 02.png, then turning on cover detection, which moves the cover
+	// to the front and 02.png from index 1 to 2.
+	s.settings.SetDetectCovers(true)
+	info, err := s.Reopen(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.StartPage != 2 {
+		t.Errorf("StartPage = %d, want 2", info.StartPage)
+	}
+	if s.book.PageName(0) != "zz_cover.png" {
+		t.Errorf("first page = %q", s.book.PageName(0))
+	}
+}

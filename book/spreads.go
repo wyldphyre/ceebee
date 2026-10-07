@@ -1,17 +1,18 @@
 package book
 
-// BuildSpreads groups pages into two-page spreads. The cover and any wide
-// pages are always alone; pages before and after the cover are paired in
-// order, with any leftover page alone. wide may be nil.
-func BuildSpreads(pageCount, coverIndex int, wide []bool) [][]int {
+// BuildSpreads groups pages into two-page spreads. The cover and the pages
+// marked in alone (such as wide pages) are always on their own; pages before
+// and after the cover are paired in order, with any leftover page alone.
+// alone may be nil.
+func BuildSpreads(pageCount, coverIndex int, alone []bool) [][]int {
 	if coverIndex < 0 || coverIndex >= pageCount {
 		coverIndex = 0
 	}
-	isWide := func(i int) bool { return i < len(wide) && wide[i] }
+	isAlone := func(i int) bool { return i < len(alone) && alone[i] }
 	spreads := [][]int{}
 	pair := func(from, to int) {
 		for i := from; i < to; {
-			if i+1 < to && !isWide(i) && !isWide(i+1) {
+			if i+1 < to && !isAlone(i) && !isAlone(i+1) {
 				spreads = append(spreads, []int{i, i + 1})
 				i += 2
 			} else {

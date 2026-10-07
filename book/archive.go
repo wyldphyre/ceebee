@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -51,8 +52,10 @@ type Book struct {
 	Title      string
 	CoverIndex int
 	RTL        bool
-	Wide       []bool  // per page: notably wider than a typical page
-	Metadata   []Field // ComicInfo.xml fields; nil if there is none
+	// Alone marks the pages shown on their own in two-page mode, besides the
+	// cover: wide pages, and the covers found by Options.DetectCovers.
+	Alone    []bool
+	Metadata []Field // ComicInfo.xml fields; nil if there is none
 
 	pages []string // entry names, sorted
 
@@ -90,8 +93,18 @@ func DetectFormat(header []byte, name string) Format {
 	return FormatUnknown
 }
 
+// Options change the order of a book's pages.
+type Options struct {
+	// DetectCovers moves pages whose file names contain "cover" to the front,
+	// each shown on its own, when ComicInfo.xml doesn't say which page is the
+	// cover.
+	DetectCovers bool
+	// DetectCredits moves pages whose file names contain "credits" to the end.
+	DetectCredits bool
+}
+
 // Open opens the comic archive at filename.
-func Open(filename string) (*Book, error) {
+func Open(filename string, opts Options) (*Book, error) {
 	header, err := readHeader(filename)
 	if err != nil {
 		// Both are wrapped, so callers can tell a missing file with
@@ -133,15 +146,51 @@ func Open(filename string) (*Book, error) {
 	}
 	base := strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename))
 	b.Title = info.TitleOr(base)
-	b.CoverIndex = info.Cover(len(b.pages))
 	b.RTL = info.IsRTL()
+
+	// ComicInfo.xml numbers pages in their natural order, so note the cover
+	// it names before any pages move.
+	coverIndex, namedCover := info.FrontCover(len(b.pages))
+	coverName := b.pages[coverIndex]
+	var covers []string
+	if opts.DetectCovers && !namedCover {
+		b.pages, covers = movePages(b.pages, "cover", true)
+	}
+	if opts.DetectCredits {
+		b.pages, _ = movePages(b.pages, "credits", false)
+	}
+	if namedCover {
+		b.CoverIndex = b.PageIndex(coverName)
+	}
 
 	sizes := make([]image.Point, len(b.pages))
 	for i, name := range b.pages {
 		sizes[i] = b.pageSize(name)
 	}
-	b.Wide = WideFlags(sizes)
+	b.Alone = WideFlags(sizes)
+	for _, name := range covers {
+		b.Alone[b.PageIndex(name)] = true
+	}
 	return b, nil
+}
+
+// movePages moves the pages whose file names contain word, ignoring case, to
+// the front or the end, keeping their order. It returns the new order and the
+// pages it moved.
+func movePages(pages []string, word string, toFront bool) (ordered, moved []string) {
+	var rest []string
+	for _, name := range pages {
+		base := path.Base(strings.ReplaceAll(name, "\\", "/"))
+		if strings.Contains(strings.ToLower(base), word) {
+			moved = append(moved, name)
+		} else {
+			rest = append(rest, name)
+		}
+	}
+	if toFront {
+		return append(moved, rest...), moved
+	}
+	return append(rest, moved...), moved
 }
 
 func readHeader(filename string) ([]byte, error) {
@@ -294,6 +343,19 @@ func (b *Book) read(name string) ([]byte, error) {
 
 // PageCount returns the number of pages.
 func (b *Book) PageCount() int { return len(b.pages) }
+
+// PageName returns the archive entry name of the page at index, or "".
+func (b *Book) PageName(index int) string {
+	if index < 0 || index >= len(b.pages) {
+		return ""
+	}
+	return b.pages[index]
+}
+
+// PageIndex returns the index of the page with the given entry name, or -1.
+func (b *Book) PageIndex(name string) int {
+	return slices.Index(b.pages, name)
+}
 
 // Page returns the bytes and content type of the page at index.
 func (b *Book) Page(index int) ([]byte, string, error) {

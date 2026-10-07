@@ -29,9 +29,11 @@ type menus struct {
 	showInFile *application.MenuItem
 
 	// The items that appear in both menus, so their state is kept in step.
-	showToolbar []*application.MenuItem
-	showInfo    []*application.MenuItem
-	goItems     []*application.MenuItem
+	showToolbar   []*application.MenuItem
+	showInfo      []*application.MenuItem
+	detectCovers  []*application.MenuItem
+	detectCredits []*application.MenuItem
+	goItems       []*application.MenuItem
 }
 
 // contextMenuName is the name the frontend's CSS uses to show the context
@@ -140,7 +142,32 @@ func (m *menus) addViewItems(menu *application.Menu) {
 			m.app.Event.Emit("show-info", ctx.ClickedMenuItem().Checked())
 		}))
 	menu.AddSeparator()
+	m.detectCovers = append(m.detectCovers, m.addPageOrderItem(menu, "Detect Cover Images",
+		m.reader.settings.DetectCovers(), m.reader.settings.SetDetectCovers, &m.detectCovers))
+	m.detectCredits = append(m.detectCredits, m.addPageOrderItem(menu, "Detect Credit Images",
+		m.reader.settings.DetectCredits(), m.reader.settings.SetDetectCredits, &m.detectCredits))
+	menu.AddSeparator()
 	menu.AddRole(application.ToggleFullscreen)
+}
+
+// addPageOrderItem adds a checkbox for a saved setting that changes the order
+// of books' pages. Clicking it saves the setting, ticks or unticks the item in
+// both menus, and tells the frontend to reopen the book in the new order.
+func (m *menus) addPageOrderItem(menu *application.Menu, label string, checked bool,
+	save func(bool) error, items *[]*application.MenuItem) *application.MenuItem {
+	return menu.AddCheckbox(label, checked).OnClick(func(ctx *application.Context) {
+		on := ctx.ClickedMenuItem().Checked()
+		if err := save(on); err != nil {
+			log.Printf("saving settings: %v", err)
+		}
+		m.mu.Lock()
+		for _, item := range *items {
+			item.SetChecked(on)
+		}
+		m.redraw()
+		m.mu.Unlock()
+		m.app.Event.Emit("page-order-changed")
+	})
 }
 
 // addGoItems adds the Go menu's navigation items to a menu. Each item sends

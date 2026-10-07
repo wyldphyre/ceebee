@@ -99,7 +99,7 @@ func checkFixtureBook(t *testing.T, path string, wantFormat Format) {
 	if got := DetectFormat(header, path); got != wantFormat {
 		t.Errorf("DetectFormat = %v, want %v", got, wantFormat)
 	}
-	b, err := Open(path)
+	b, err := Open(path, Options{})
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -159,13 +159,13 @@ func TestOpenErrors(t *testing.T) {
 
 	junk := filepath.Join(dir, "junk.txt")
 	os.WriteFile(junk, []byte("hello"), 0o644)
-	if _, err := Open(junk); !errors.Is(err, ErrUnsupported) {
+	if _, err := Open(junk, Options{}); !errors.Is(err, ErrUnsupported) {
 		t.Errorf("junk: got %v, want ErrUnsupported", err)
 	}
 
 	corrupt := filepath.Join(dir, "corrupt.cbz")
 	os.WriteFile(corrupt, []byte("PK\x03\x04garbage"), 0o644)
-	if _, err := Open(corrupt); !errors.Is(err, ErrUnsupported) {
+	if _, err := Open(corrupt, Options{}); !errors.Is(err, ErrUnsupported) {
 		t.Errorf("corrupt: got %v, want ErrUnsupported", err)
 	}
 
@@ -176,7 +176,7 @@ func TestOpenErrors(t *testing.T) {
 	w.Write([]byte("no images"))
 	zw.Close()
 	f.Close()
-	if _, err := Open(empty); !errors.Is(err, ErrNoPages) {
+	if _, err := Open(empty, Options{}); !errors.Is(err, ErrNoPages) {
 		t.Errorf("empty: got %v, want ErrNoPages", err)
 	}
 }
