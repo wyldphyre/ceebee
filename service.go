@@ -68,7 +68,10 @@ func (s *ReaderService) OpenPath(path string) (*BookInfo, error) {
 	if abs, err := filepath.Abs(path); err == nil {
 		path = abs
 	}
-	b, err := book.Open(path)
+	b, err := book.Open(path, book.Options{
+		DetectCovers:  s.settings.DetectCovers(),
+		DetectCredits: s.settings.DetectCredits(),
+	})
 	if err != nil {
 		// A book that has been moved or deleted is dropped from Open Recent.
 		if errors.Is(err, fs.ErrNotExist) {
@@ -96,7 +99,7 @@ func (s *ReaderService) OpenPath(path string) (*BookInfo, error) {
 		PageCount:  b.PageCount(),
 		CoverIndex: b.CoverIndex,
 		RTL:        b.RTL,
-		Spreads:    book.BuildSpreads(b.PageCount(), b.CoverIndex, b.Wide),
+		Spreads:    book.BuildSpreads(b.PageCount(), b.CoverIndex, b.Alone),
 		Metadata:   b.Metadata,
 		StartPage:  start,
 	}
@@ -119,6 +122,30 @@ func (s *ReaderService) forgetRecent(path string) {
 	if s.onRecentChanged != nil {
 		s.onRecentChanged()
 	}
+}
+
+// Reopen opens the current book again after a setting that changes its page
+// order, starting at the page that was at index page.
+func (s *ReaderService) Reopen(page int) (*BookInfo, error) {
+	s.mu.RLock()
+	path, name := s.bookPath, ""
+	if s.book != nil {
+		name = s.book.PageName(page)
+	}
+	s.mu.RUnlock()
+	if path == "" {
+		return nil, nil
+	}
+	info, err := s.OpenPath(path)
+	if err != nil {
+		return nil, err
+	}
+	s.mu.RLock()
+	if i := s.book.PageIndex(name); i >= 0 {
+		info.StartPage = i
+	}
+	s.mu.RUnlock()
+	return info, nil
 }
 
 // currentPath returns the open book's path, or "" if none is open.

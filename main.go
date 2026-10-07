@@ -33,6 +33,8 @@ func init() {
 	application.RegisterEvent[bool]("show-info")
 	// Sent from the frontend when the Info panel's state changes.
 	application.RegisterEvent[InfoState]("info-state")
+	// Sent when a View menu setting changes the order of books' pages.
+	application.RegisterEvent[application.Void]("page-order-changed")
 	// Sent with a navigation action from the Go menu: "next", "previous",
 	// "right", "left", "first" or "last".
 	application.RegisterEvent[string]("navigate")

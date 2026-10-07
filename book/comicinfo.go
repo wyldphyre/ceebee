@@ -111,8 +111,15 @@ func (ci *ComicInfo) IsRTL() bool {
 
 // Cover returns the first valid FrontCover page index, or 0.
 func (ci *ComicInfo) Cover(pageCount int) int {
+	index, _ := ci.FrontCover(pageCount)
+	return index
+}
+
+// FrontCover returns the first valid FrontCover page index, and whether there
+// is one.
+func (ci *ComicInfo) FrontCover(pageCount int) (int, bool) {
 	if ci == nil {
-		return 0
+		return 0, false
 	}
 	for _, p := range ci.Pages {
 		if strings.TrimSpace(p.Type) != "FrontCover" {
@@ -120,10 +127,10 @@ func (ci *ComicInfo) Cover(pageCount int) int {
 		}
 		n, err := strconv.Atoi(strings.TrimSpace(p.Image))
 		if err == nil && n >= 0 && n < pageCount {
-			return n
+			return n, true
 		}
 	}
-	return 0
+	return 0, false
 }
 
 // TitleOr builds the display title, "{Series} #{Number} – {Title}", leaving

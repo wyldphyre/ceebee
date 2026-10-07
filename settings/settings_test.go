@@ -129,3 +129,21 @@ func TestRecent(t *testing.T) {
 		t.Errorf("after ClearRecent: %v", got)
 	}
 }
+
+func TestDetectSettings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	s := Load(path)
+	if s.DetectCovers() || s.DetectCredits() {
+		t.Error("cover and credit detection should default to off")
+	}
+	if err := s.SetDetectCovers(true); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetDetectCredits(true); err != nil {
+		t.Fatal(err)
+	}
+	s = Load(path)
+	if !s.DetectCovers() || !s.DetectCredits() {
+		t.Error("cover and credit detection should be saved")
+	}
+}

@@ -585,6 +585,12 @@ ReaderService.Version().then((v) => {
     document.getElementById("about-version")!.textContent = `Version ${v}`;
 });
 
+// A View menu setting changed the page order, so reopen the book in the new
+// order at the page being shown.
+Events.On("page-order-changed", () => {
+    if (book) open(() => ReaderService.Reopen(views()[viewIndex][0]));
+});
+
 Events.On("open-file", (e) => open(() => ReaderService.OpenPath(e.data)));
 
 function saveViewSettings() {
