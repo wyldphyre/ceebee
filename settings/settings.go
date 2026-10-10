@@ -27,7 +27,10 @@ type View struct {
 
 // Position is where reading stopped in a book.
 type Position struct {
-	Page int       `json:"page"`
+	Page int `json:"page"`
+	// Name is the page's entry name in the archive, which finds the page
+	// again if the pages' order changes. Empty for the first page.
+	Name string    `json:"name,omitempty"`
 	Time time.Time `json:"time"`
 }
 
@@ -141,27 +144,27 @@ func (s *Store) SetDetectCredits(on bool) error {
 	return s.save()
 }
 
-// Position returns the saved page for a book, if positions are remembered
+// Position returns the saved position in a book, if positions are remembered
 // and one was saved.
-func (s *Store) Position(book string) (int, bool) {
+func (s *Store) Position(book string) (Position, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.data.RememberPosition {
-		return 0, false
+		return Position{}, false
 	}
 	p, ok := s.data.Positions[book]
-	return p.Page, ok
+	return p, ok
 }
 
-// SetPosition saves the page reached in a book. It does nothing when
-// positions are not being remembered.
-func (s *Store) SetPosition(book string, page int) error {
+// SetPosition saves the page reached in a book, by index and entry name. It
+// does nothing when positions are not being remembered.
+func (s *Store) SetPosition(book string, page int, name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.data.RememberPosition {
 		return nil
 	}
-	s.data.Positions[book] = Position{Page: page, Time: time.Now()}
+	s.data.Positions[book] = Position{Page: page, Name: name, Time: time.Now()}
 	if len(s.data.Positions) > maxPositions {
 		s.prune()
 	}

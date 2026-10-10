@@ -80,8 +80,16 @@ func (s *ReaderService) OpenPath(path string) (*BookInfo, error) {
 		return nil, err
 	}
 	id := rand.Text()
-	start, ok := s.settings.Position(path)
-	if !ok || start < 0 || start >= b.PageCount() {
+	start := 0
+	if pos, ok := s.settings.Position(path); ok {
+		// Find the page by name, in case the pages' order has changed since,
+		// such as by turning on cover detection.
+		start = pos.Page
+		if i := b.PageIndex(pos.Name); pos.Name != "" && i >= 0 {
+			start = i
+		}
+	}
+	if start < 0 || start >= b.PageCount() {
 		start = 0
 	}
 
@@ -172,11 +180,17 @@ func (s *ReaderService) SaveViewSettings(v settings.View) {
 func (s *ReaderService) SavePosition(bookID string, page int) {
 	s.mu.RLock()
 	path, current := s.bookPath, bookID == s.bookID
+	name := ""
+	// Page 0 is saved without a name: it means the start of the book, which
+	// stays page 0 whatever the order.
+	if current && page > 0 {
+		name = s.book.PageName(page)
+	}
 	s.mu.RUnlock()
 	if !current {
 		return
 	}
-	if err := s.settings.SetPosition(path, page); err != nil {
+	if err := s.settings.SetPosition(path, page, name); err != nil {
 		log.Printf("saving reading position: %v", err)
 	}
 }

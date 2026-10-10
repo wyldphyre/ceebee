@@ -15,6 +15,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/bodgit/sevenzip"
 	"github.com/nwaples/rardecode/v2"
@@ -95,11 +96,12 @@ func DetectFormat(header []byte, name string) Format {
 
 // Options change the order of a book's pages.
 type Options struct {
-	// DetectCovers moves pages whose file names contain "cover" to the front,
-	// each shown on its own, when ComicInfo.xml doesn't say which page is the
-	// cover.
+	// DetectCovers moves pages whose file names contain the word "cover" or
+	// "covers" to the front, each shown on its own, when ComicInfo.xml doesn't
+	// say which page is the cover.
 	DetectCovers bool
-	// DetectCredits moves pages whose file names contain "credits" to the end.
+	// DetectCredits moves pages whose file names contain the word "credit" or
+	// "credits" to the end.
 	DetectCredits bool
 }
 
@@ -157,7 +159,7 @@ func Open(filename string, opts Options) (*Book, error) {
 		b.pages, covers = movePages(b.pages, "cover", true)
 	}
 	if opts.DetectCredits {
-		b.pages, _ = movePages(b.pages, "credits", false)
+		b.pages, _ = movePages(b.pages, "credit", false)
 	}
 	if namedCover {
 		b.CoverIndex = b.PageIndex(coverName)
@@ -174,14 +176,13 @@ func Open(filename string, opts Options) (*Book, error) {
 	return b, nil
 }
 
-// movePages moves the pages whose file names contain word, ignoring case, to
-// the front or the end, keeping their order. It returns the new order and the
-// pages it moved.
+// movePages moves the pages whose file names contain word, or its plural, as
+// a word of their own, to the front or the end, keeping their order. It
+// returns the new order and the pages it moved.
 func movePages(pages []string, word string, toFront bool) (ordered, moved []string) {
 	var rest []string
 	for _, name := range pages {
-		base := path.Base(strings.ReplaceAll(name, "\\", "/"))
-		if strings.Contains(strings.ToLower(base), word) {
+		if hasWord(name, word) {
 			moved = append(moved, name)
 		} else {
 			rest = append(rest, name)
@@ -191,6 +192,16 @@ func movePages(pages []string, word string, toFront bool) (ordered, moved []stri
 		return append(moved, rest...), moved
 	}
 	return append(rest, moved...), moved
+}
+
+// hasWord reports whether a file name, without its folders or extension,
+// contains word or word+"s", ignoring case. Words are runs of letters, so
+// "cover" is found in "Batman_01_Cover2.jpg" but not in "Discovery 01.jpg".
+func hasWord(name, word string) bool {
+	base := path.Base(strings.ReplaceAll(name, "\\", "/"))
+	base = strings.TrimSuffix(base, path.Ext(base))
+	words := strings.FieldsFunc(strings.ToLower(base), func(r rune) bool { return !unicode.IsLetter(r) })
+	return slices.Contains(words, word) || slices.Contains(words, word+"s")
 }
 
 func readHeader(filename string) ([]byte, error) {
