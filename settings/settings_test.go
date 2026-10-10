@@ -45,7 +45,7 @@ func TestRoundTrip(t *testing.T) {
 	if err := s.SetView(view); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetPosition("/comics/a.cbz", 12); err != nil {
+	if err := s.SetPosition("/comics/a.cbz", 12, "p12.png"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -53,8 +53,8 @@ func TestRoundTrip(t *testing.T) {
 	if got := s.View(); got != view {
 		t.Errorf("View = %+v, want %+v", got, view)
 	}
-	if page, ok := s.Position("/comics/a.cbz"); !ok || page != 12 {
-		t.Errorf("Position = %d, %v", page, ok)
+	if p, ok := s.Position("/comics/a.cbz"); !ok || p.Page != 12 || p.Name != "p12.png" {
+		t.Errorf("Position = %+v, %v", p, ok)
 	}
 	if _, ok := s.Position("/comics/other.cbz"); ok {
 		t.Error("unknown book should have no position")
@@ -64,11 +64,11 @@ func TestRoundTrip(t *testing.T) {
 func TestRememberPositionOff(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	s := Load(path)
-	s.SetPosition("/a.cbz", 5)
+	s.SetPosition("/a.cbz", 5, "")
 	if err := s.SetRememberPosition(false); err != nil {
 		t.Fatal(err)
 	}
-	s.SetPosition("/b.cbz", 7)
+	s.SetPosition("/b.cbz", 7, "")
 
 	s = Load(path)
 	if s.RememberPosition() {
@@ -86,7 +86,7 @@ func TestRememberPositionOff(t *testing.T) {
 func TestPrune(t *testing.T) {
 	s := Load(filepath.Join(t.TempDir(), "settings.json"))
 	for i := 0; i <= maxPositions; i++ {
-		s.SetPosition(fmt.Sprintf("/book%d.cbz", i), i)
+		s.SetPosition(fmt.Sprintf("/book%d.cbz", i), i, "")
 	}
 	if n := len(s.data.Positions); n != maxPositions {
 		t.Errorf("kept %d positions, want %d", n, maxPositions)

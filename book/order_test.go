@@ -56,10 +56,10 @@ func TestPageOrderDefault(t *testing.T) {
 }
 
 func TestDetectCovers(t *testing.T) {
-	path := writeNamedBook(t, []string{"p1.png", "p2.png", "p3.png", "Cover.png", "z_variant_cover.png", "scans/discovery.png"}, "")
+	path := writeNamedBook(t, []string{"p1.png", "p2.png", "p3.png", "Cover.png", "z_variant_cover.png", "scans/Covers2.png"}, "")
 	b := openOrder(t, path, Options{DetectCovers: true})
 	// Covers keep their name order: scans/… sorts before z_….
-	want := []string{"Cover.png", "scans/discovery.png", "z_variant_cover.png", "p1.png", "p2.png", "p3.png"}
+	want := []string{"Cover.png", "scans/Covers2.png", "z_variant_cover.png", "p1.png", "p2.png", "p3.png"}
 	if !reflect.DeepEqual(b.pages, want) {
 		t.Errorf("pages = %v, want %v", b.pages, want)
 	}
@@ -72,6 +72,36 @@ func TestDetectCovers(t *testing.T) {
 	}
 	if got := BuildSpreads(b.PageCount(), b.CoverIndex, b.Alone); !reflect.DeepEqual(got, [][]int{{0}, {1}, {2}, {3, 4}, {5}}) {
 		t.Errorf("spreads = %v", got)
+	}
+}
+
+func TestDetectCoversMatchesWholeWords(t *testing.T) {
+	// "cover" inside another word, such as the series name, isn't a cover.
+	path := writeNamedBook(t, []string{"Discovery 01.png", "Discovery 02.png", "Undercover_03.png", "recovered.png"}, "")
+	b := openOrder(t, path, Options{DetectCovers: true})
+	if want := []bool{false, false, false, false}; !reflect.DeepEqual(b.Alone, want) {
+		t.Errorf("Alone = %v, want %v", b.Alone, want)
+	}
+}
+
+func TestHasWord(t *testing.T) {
+	for _, tc := range []struct {
+		name, word string
+		want       bool
+	}{
+		{"cover.jpg", "cover", true},
+		{"Batman_01_Cover2.jpg", "cover", true},
+		{"variant-COVERS.png", "cover", true},
+		{"scans\\cover.png", "cover", true},
+		{"Discovery 01.jpg", "cover", false},
+		{"cover/01.jpg", "cover", false}, // folders don't count
+		{"00_credits.png", "credit", true},
+		{"Credit.png", "credit", true},
+		{"accredited.png", "credit", false},
+	} {
+		if got := hasWord(tc.name, tc.word); got != tc.want {
+			t.Errorf("hasWord(%q, %q) = %v, want %v", tc.name, tc.word, got, tc.want)
+		}
 	}
 }
 
