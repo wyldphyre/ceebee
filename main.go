@@ -69,6 +69,11 @@ func main() {
 		Mac: application.MacOptions{
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
+		// GNOME finds the window's icon through its desktop entry, which
+		// names this id as its StartupWMClass (see build/linux/Taskfile.yml).
+		Linux: application.LinuxOptions{
+			ApplicationID: appID,
+		},
 	})
 	reader.app = app
 

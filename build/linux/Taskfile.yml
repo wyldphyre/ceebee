@@ -173,8 +173,14 @@ tasks:
     cmds:
       - mkdir -p {{.ROOT_DIR}}/build/linux/appimage
       - wails3 generate .desktop -name "{{.APP_NAME}}" -exec "{{.EXEC}}" -icon "{{.ICON}}" -outputfile "{{.ROOT_DIR}}/build/linux/{{.APP_NAME}}.desktop" -categories "{{.CATEGORIES}}" -mimetype "{{.MIMETYPES}}"
+      # GNOME matches a window to its desktop entry by the window's app id,
+      # which is the productIdentifier (see main.go), not the entry's file
+      # name, so without this the window gets no icon.
+      - echo "StartupWMClass={{.APP_ID}}" >> "{{.ROOT_DIR}}/build/linux/{{.APP_NAME}}.desktop"
     vars:
       APP_NAME: '{{.APP_NAME}}'
+      APP_ID:
+        sh: awk -F'"' '/^ *productIdentifier:/ {print $2; exit}' "{{.ROOT_DIR}}/build/config.yml"
       # %f passes the opened file's path as the first argument
       EXEC: '{{.APP_NAME}} %f'
       ICON: '{{.APP_NAME}}'
