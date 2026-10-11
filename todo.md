@@ -2,7 +2,7 @@
 
 ## Fix
 
-- Bug: On linux, after you open a file via the "Recent" menu, the menu retais focus, so pressing spacebar to advance triggers activity in the menu.
+- The app doesn't use the app icon on linux
 
 ## Planned
 

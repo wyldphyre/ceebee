@@ -4,6 +4,8 @@ import (
 	"embed"
 	"log"
 	"net/http"
+	"os"
+	"runtime"
 
 	"ceebee/settings"
 
@@ -41,6 +43,13 @@ func init() {
 }
 
 func main() {
+	// GTK's OpenGL renderer can take half a second to show a menu the first
+	// time it opens, so draw with the software renderer on Linux, unless
+	// GSK_RENDERER chooses one.
+	if runtime.GOOS == "linux" && os.Getenv("GSK_RENDERER") == "" {
+		os.Setenv("GSK_RENDERER", "cairo")
+	}
+
 	settingsPath, err := settings.DefaultPath()
 	if err != nil {
 		log.Printf("no settings directory, settings won't be saved: %v", err)
@@ -89,6 +98,10 @@ func main() {
 		if files := e.Context().DroppedFiles(); len(files) > 0 {
 			app.Event.Emit("open-file", files[0])
 		}
+	})
+
+	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
+		keepFocusOffMenuBar(window)
 	})
 
 	// macOS sends files opened from Finder as an event, whether or not the app
