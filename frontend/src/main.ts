@@ -17,6 +17,10 @@ const indicatorEl = document.getElementById("indicator")!;
 const readerEl = document.getElementById("reader")!;
 const spreadEl = document.getElementById("spread")!;
 const emptyEl = document.getElementById("empty")!;
+const loadingEl = document.getElementById("loading")!;
+const loadingMessageEl = document.getElementById("loading-message")!;
+const loadingBarEl = document.getElementById("loading-bar")!;
+const loadingFillEl = document.getElementById("loading-fill")!;
 const errorEl = document.getElementById("error")!;
 const errorMessageEl = document.getElementById("error-message")!;
 const progressEl = document.getElementById("progress")!;
@@ -463,14 +467,53 @@ function showAbout() {
     if (!aboutEl.open) aboutEl.showModal();
 }
 
-async function open(load: () => Promise<BookInfo | null>) {
+// Counts opens, so that only the latest one shows its loading message.
+let loadToken = 0;
+let loadingTimer = 0;
+
+// Opens a book, showing a loading message named for it if that takes a while.
+async function open(load: () => Promise<BookInfo | null>, name: string) {
+    const token = ++loadToken;
+    loadingMessageEl.textContent = `Loading “${name}”…`;
+    loadingBarEl.hidden = true;
+    loadingFillEl.style.width = "0";
+    // Wait before showing it, so that quick opens don't flash it.
+    clearTimeout(loadingTimer);
+    loadingTimer = setTimeout(() => {
+        loadingEl.hidden = false;
+        emptyEl.hidden = true;
+    }, 150);
     try {
         const info = await load();
         if (info) setBook(info);
     } catch (err) {
         showError(err instanceof Error ? err.message : String(err));
+    } finally {
+        if (token === loadToken) {
+            clearTimeout(loadingTimer);
+            loadingEl.hidden = true;
+            emptyEl.hidden = book !== null;
+        }
     }
 }
+
+function openPath(path: string) {
+    open(() => ReaderService.OpenPath(path), path.split(/[\\/]/).pop() || path);
+}
+
+async function chooseFile() {
+    try {
+        const path = await ReaderService.ChooseFile();
+        if (path) openPath(path);
+    } catch (err) {
+        showError(err instanceof Error ? err.message : String(err));
+    }
+}
+
+Events.On("open-progress", (e) => {
+    loadingBarEl.hidden = false;
+    loadingFillEl.style.width = `${Math.min(100, e.data)}%`;
+});
 
 function showError(message: string) {
     errorMessageEl.textContent = message;
@@ -481,7 +524,7 @@ function hideError() {
     errorEl.hidden = true;
 }
 
-openButton.addEventListener("click", () => open(() => ReaderService.OpenDialog()));
+openButton.addEventListener("click", chooseFile);
 
 layoutButtons.forEach((b) => b.addEventListener("click", () => {
     const wantTwoPage = b.dataset.pages === "2";
@@ -563,7 +606,7 @@ readerEl.addEventListener("pointerdown", () => stopIndex = -1);
 
 infoButton.addEventListener("click", toggleInfo);
 Events.On("show-about", showAbout);
-Events.On("show-open-dialog", () => open(() => ReaderService.OpenDialog()));
+Events.On("show-open-dialog", chooseFile);
 Events.On("show-toolbar", (e) => {
     toolbarEl.hidden = !e.data;
     layout();
@@ -588,10 +631,10 @@ ReaderService.Version().then((v) => {
 // A View menu setting changed the page order, so reopen the book in the new
 // order at the page being shown.
 Events.On("page-order-changed", () => {
-    if (book) open(() => ReaderService.Reopen(views()[viewIndex][0]));
+    if (book) open(() => ReaderService.Reopen(views()[viewIndex][0]), book.title);
 });
 
-Events.On("open-file", (e) => open(() => ReaderService.OpenPath(e.data)));
+Events.On("open-file", (e) => openPath(e.data));
 
 function saveViewSettings() {
     ReaderService.SaveViewSettings({twoPage, scaleMode, showProgress});
@@ -607,5 +650,5 @@ ReaderService.ViewSettings().then((view) => {
     }
     updateToolbar();
 }).finally(() => ReaderService.StartupPath().then((path) => {
-    if (path) open(() => ReaderService.OpenPath(path));
+    if (path) openPath(path);
 }));

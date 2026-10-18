@@ -50,17 +50,14 @@ type ReaderService struct {
 	frontendReady bool
 }
 
-// OpenDialog shows the native file dialog and opens the chosen book. It
-// returns nil if the dialog is cancelled.
-func (s *ReaderService) OpenDialog() (*BookInfo, error) {
-	path, err := s.app.Dialog.OpenFile().
+// ChooseFile shows the native file dialog and returns the chosen book's path,
+// or "" if the dialog is cancelled. The frontend opens it with OpenPath, so
+// it can show that the book is loading.
+func (s *ReaderService) ChooseFile() (string, error) {
+	return s.app.Dialog.OpenFile().
 		SetTitle("Open Comic").
 		AddFilter("Comic Books", "*.cbz;*.cbr;*.cb7;*.cbt").
 		PromptForSingleSelection()
-	if err != nil || path == "" {
-		return nil, err
-	}
-	return s.OpenPath(path)
 }
 
 // OpenPath opens the book at path, replacing the current one.
@@ -71,6 +68,7 @@ func (s *ReaderService) OpenPath(path string) (*BookInfo, error) {
 	b, err := book.Open(path, book.Options{
 		DetectCovers:  s.settings.DetectCovers(),
 		DetectCredits: s.settings.DetectCredits(),
+		Progress:      s.progressReporter(),
 	})
 	if err != nil {
 		// A book that has been moved or deleted is dropped from Open Recent.
@@ -118,6 +116,24 @@ func (s *ReaderService) OpenPath(path string) (*BookInfo, error) {
 		s.onOpen()
 	}
 	return info, nil
+}
+
+// progressReporter returns a book.Options.Progress function that sends the
+// percentage loaded to the frontend, only when it changes.
+func (s *ReaderService) progressReporter() func(done, total int64) {
+	if s.app == nil {
+		return nil
+	}
+	last := -1
+	return func(done, total int64) {
+		if total <= 0 {
+			return
+		}
+		if percent := int(done * 100 / total); percent != last {
+			last = percent
+			s.app.Event.Emit("open-progress", percent)
+		}
+	}
 }
 
 func (s *ReaderService) forgetRecent(path string) {
