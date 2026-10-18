@@ -25,6 +25,8 @@ func init() {
 	// Sent with the path of a file to open: dropped onto the window, or
 	// opened from the OS (for example double-clicked in Finder).
 	application.RegisterEvent[string]("open-file")
+	// Sent with the percentage of a book loaded while it opens.
+	application.RegisterEvent[int]("open-progress")
 	// Sent when About CeeBee is chosen from the menu.
 	application.RegisterEvent[application.Void]("show-about")
 	// Sent when File › Open… is chosen.

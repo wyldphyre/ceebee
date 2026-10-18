@@ -180,3 +180,32 @@ func TestOpenErrors(t *testing.T) {
 		t.Errorf("empty: got %v, want ErrNoPages", err)
 	}
 }
+
+func TestOpenReportsProgress(t *testing.T) {
+	dir := t.TempDir()
+	cbz := filepath.Join(dir, "book.cbz")
+	writeZip(t, cbz)
+	cbt := filepath.Join(dir, "book.cbt")
+	writeTar(t, cbt)
+
+	for _, path := range []string{cbz, cbt, "testdata/fixture.cbr", "testdata/fixture.cb7"} {
+		t.Run(filepath.Ext(path), func(t *testing.T) {
+			var last, total int64
+			calls := 0
+			b, err := Open(path, Options{Progress: func(d, tot int64) {
+				if d < last || d > tot {
+					t.Errorf("progress %d/%d after %d", d, tot, last)
+				}
+				last, total = d, tot
+				calls++
+			}})
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			b.Close()
+			if calls == 0 || last != total {
+				t.Errorf("progress ended at %d/%d after %d calls, want complete", last, total, calls)
+			}
+		})
+	}
+}

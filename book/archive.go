@@ -103,6 +103,10 @@ type Options struct {
 	// DetectCredits moves pages whose file names contain the word "credit" or
 	// "credits" to the end.
 	DetectCredits bool
+	// Progress, if set, is called as the book opens with how much of the
+	// work is done and the total: bytes of the file read for CBR, CB7 and
+	// CBT, which are read whole, and pages measured for CBZ.
+	Progress func(done, total int64)
 }
 
 // Open opens the comic archive at filename.
@@ -114,17 +118,24 @@ func Open(filename string, opts Options) (*Book, error) {
 		return nil, fmt.Errorf("%w: %w", ErrUnsupported, err)
 	}
 
+	var p *progress
+	if opts.Progress != nil {
+		if fi, err := os.Stat(filename); err == nil {
+			p = &progress{total: fi.Size(), report: opts.Progress}
+		}
+	}
+
 	b := &Book{}
 	var names []string
 	switch DetectFormat(header, filename) {
 	case FormatZip:
 		names, err = b.openZip(filename)
 	case FormatRar:
-		names, err = b.readAll(filename, walkRar)
+		names, err = b.readAll(filename, p, walkRar)
 	case Format7z:
-		names, err = b.readAll(filename, walk7z)
+		names, err = b.readAll(filename, p, walk7z)
 	case FormatTar:
-		names, err = b.readAll(filename, walkTar)
+		names, err = b.readAll(filename, p, walkTar)
 	default:
 		return nil, ErrUnsupported
 	}
@@ -165,9 +176,14 @@ func Open(filename string, opts Options) (*Book, error) {
 		b.CoverIndex = b.PageIndex(coverName)
 	}
 
+	// Measuring a CBZ's pages reads each one's header from the file, which
+	// is slow over a network, so it reports progress.
 	sizes := make([]image.Point, len(b.pages))
 	for i, name := range b.pages {
 		sizes[i] = b.pageSize(name)
+		if b.zr != nil && opts.Progress != nil {
+			opts.Progress(int64(i+1), int64(len(b.pages)))
+		}
 	}
 	b.Alone = WideFlags(sizes)
 	for _, name := range covers {
@@ -237,13 +253,14 @@ func (b *Book) openZip(filename string) ([]string, error) {
 }
 
 // walkFunc calls visit for every regular file in an archive, in archive order.
-type walkFunc func(filename string, visit func(name string, r io.Reader) error) error
+// It reports how far through the file it has read to p, which may be nil.
+type walkFunc func(filename string, p *progress, visit func(name string, r io.Reader) error) error
 
 // readAll reads every page and ComicInfo.xml into memory.
-func (b *Book) readAll(filename string, walk walkFunc) ([]string, error) {
+func (b *Book) readAll(filename string, p *progress, walk walkFunc) ([]string, error) {
 	b.data = make(map[string][]byte)
 	var names []string
-	err := walk(filename, func(name string, r io.Reader) error {
+	err := walk(filename, p, func(name string, r io.Reader) error {
 		names = append(names, name)
 		if !isPage(name) && !isComicInfo(name) {
 			return nil
@@ -258,8 +275,12 @@ func (b *Book) readAll(filename string, walk walkFunc) ([]string, error) {
 	return names, err
 }
 
-func walkRar(filename string, visit func(string, io.Reader) error) error {
-	r, err := rardecode.OpenReader(filename)
+func walkRar(filename string, p *progress, visit func(string, io.Reader) error) error {
+	var opts []rardecode.Option
+	if p != nil {
+		opts = append(opts, rardecode.FileSystem(trackedFS{p}))
+	}
+	r, err := rardecode.OpenReader(filename, opts...)
 	if err != nil {
 		return err
 	}
@@ -281,12 +302,26 @@ func walkRar(filename string, visit func(string, io.Reader) error) error {
 	}
 }
 
-func walk7z(filename string, visit func(string, io.Reader) error) error {
-	r, err := sevenzip.OpenReader(filename)
-	if err != nil {
-		return err
+func walk7z(filename string, p *progress, visit func(string, io.Reader) error) error {
+	var r *sevenzip.Reader
+	// OpenReader joins the volumes of a multi-volume archive (.7z.001).
+	if p == nil || strings.HasSuffix(filename, ".001") {
+		rc, err := sevenzip.OpenReader(filename)
+		if err != nil {
+			return err
+		}
+		defer rc.Close()
+		r = &rc.Reader
+	} else {
+		f, err := openTracked(filename, p)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		if r, err = sevenzip.NewReader(f, p.total); err != nil {
+			return err
+		}
 	}
-	defer r.Close()
 	for _, f := range r.File {
 		if f.FileInfo().IsDir() {
 			continue
@@ -304,8 +339,8 @@ func walk7z(filename string, visit func(string, io.Reader) error) error {
 	return nil
 }
 
-func walkTar(filename string, visit func(string, io.Reader) error) error {
-	f, err := os.Open(filename)
+func walkTar(filename string, p *progress, visit func(string, io.Reader) error) error {
+	f, err := openTracked(filename, p)
 	if err != nil {
 		return err
 	}
