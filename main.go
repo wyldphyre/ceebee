@@ -81,7 +81,7 @@ func main() {
 
 	menus := newMenus(app, reader)
 	reader.onOpen = menus.bookOpened
-	reader.onRecentChanged = menus.recentChanged
+	reader.onRecentChanged = menus.listsChanged
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:            "Comic Reader",

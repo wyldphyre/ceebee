@@ -1,10 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"path/filepath"
 	"runtime"
 	"sync"
+
+	"ceebee/settings"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -26,6 +29,7 @@ type menus struct {
 	menu       *application.Menu
 	context    *application.ContextMenu
 	recent     *application.Menu
+	resume     *application.Menu
 	showInFile *application.MenuItem
 
 	// The items that appear in both menus, so their state is kept in step.
@@ -35,6 +39,9 @@ type menus struct {
 	detectCredits []*application.MenuItem
 	goItems       []*application.MenuItem
 }
+
+// maxResume is how many unfinished books File › Resume lists.
+const maxResume = 10
 
 // contextMenuName is the name the frontend's CSS uses to show the context
 // menu: --custom-contextmenu: reader.
@@ -71,6 +78,8 @@ func newMenus(app *application.App, reader *ReaderService) *menus {
 	})
 	m.recent = file.AddSubmenu("Open Recent")
 	m.fillRecent()
+	m.resume = file.AddSubmenu("Resume")
+	m.fillResume()
 	file.AddSeparator()
 	m.showInFile = file.Add(revealLabel()).SetEnabled(false).OnClick(func(*application.Context) {
 		if path := reader.currentPath(); path != "" {
@@ -85,6 +94,8 @@ func newMenus(app *application.App, reader *ReaderService) *menus {
 			if err := reader.settings.SetRememberPosition(ctx.ClickedMenuItem().Checked()); err != nil {
 				log.Printf("saving settings: %v", err)
 			}
+			// Turning it off forgets the positions that Resume lists.
+			m.listsChanged()
 		})
 	file.AddSeparator()
 	if runtime.GOOS == "darwin" {
@@ -206,8 +217,41 @@ func (m *menus) fillRecent() {
 		if err := m.reader.settings.ClearRecent(); err != nil {
 			log.Printf("saving recent files: %v", err)
 		}
-		m.recentChanged()
+		m.listsChanged()
 	})
+}
+
+// fillResume lists the unfinished books in File › Resume, most recently read
+// first. The open book is left out: it is already open, and leaving it out
+// means turning its pages doesn't change the menu.
+func (m *menus) fillResume() {
+	m.resume.Clear()
+	current := m.reader.currentPath()
+	n := 0
+	for _, b := range m.reader.settings.Unfinished() {
+		if b.Path == current {
+			continue
+		}
+		if n == maxResume {
+			break
+		}
+		n++
+		m.resume.Add(resumeLabel(b)).OnClick(func(*application.Context) {
+			m.app.Event.Emit("open-file", b.Path)
+		})
+	}
+	if n == 0 {
+		m.resume.Add("No Unfinished Books").SetEnabled(false)
+	}
+}
+
+// resumeLabel names an unfinished book and the page it was left at.
+func resumeLabel(b settings.Unfinished) string {
+	label := fmt.Sprintf("%s — page %d", filepath.Base(b.Path), b.Page+1)
+	if b.PageCount > 0 {
+		label += fmt.Sprintf(" of %d", b.PageCount)
+	}
+	return label
 }
 
 // bookOpened updates the menu items that depend on the open book.
@@ -231,21 +275,26 @@ func (m *menus) setInfoState(s InfoState) {
 	m.redraw()
 }
 
-// recentChanged shows a change to the recently opened list.
-func (m *menus) recentChanged() {
+// listsChanged shows a change to the books Open Recent or Resume list.
+func (m *menus) listsChanged() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.refresh()
 }
 
-// refresh rebuilds the recent list and redraws the menu. The caller holds m.mu.
+// refresh rebuilds the Open Recent and Resume lists and redraws the menu.
+// The caller holds m.mu.
 func (m *menus) refresh() {
 	m.fillRecent()
+	m.fillResume()
 	if runtime.GOOS == "linux" {
-		// Only Open Recent is rebuilt on Linux; see redraw. Wails doesn't
+		// Only the lists are rebuilt on Linux; see redraw. Wails doesn't
 		// move to the main thread to rebuild a menu, and GTK must only be
 		// used from there, so InvokeSync does.
-		application.InvokeSync(m.recent.Update)
+		application.InvokeSync(func() {
+			m.recent.Update()
+			m.resume.Update()
+		})
 		return
 	}
 	m.redraw()
