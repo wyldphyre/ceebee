@@ -46,7 +46,7 @@ func TestRoundTrip(t *testing.T) {
 	if err := s.SetView(view); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetPosition("/comics/a.cbz", 12, "p12.png", 0); err != nil {
+	if err := s.SetPosition("/comics/a.cbz", Position{Page: 12, Name: "p12.png"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -65,11 +65,11 @@ func TestRoundTrip(t *testing.T) {
 func TestRememberPositionOff(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	s := Load(path)
-	s.SetPosition("/a.cbz", 5, "", 0)
+	s.SetPosition("/a.cbz", Position{Page: 5})
 	if err := s.SetRememberPosition(false); err != nil {
 		t.Fatal(err)
 	}
-	s.SetPosition("/b.cbz", 7, "", 0)
+	s.SetPosition("/b.cbz", Position{Page: 7})
 
 	s = Load(path)
 	if s.RememberPosition() {
@@ -87,7 +87,7 @@ func TestRememberPositionOff(t *testing.T) {
 func TestPrune(t *testing.T) {
 	s := Load(filepath.Join(t.TempDir(), "settings.json"))
 	for i := 0; i <= maxPositions; i++ {
-		s.SetPosition(fmt.Sprintf("/book%d.cbz", i), i, "", 0)
+		s.SetPosition(fmt.Sprintf("/book%d.cbz", i), Position{Page: i})
 	}
 	if n := len(s.data.Positions); n != maxPositions {
 		t.Errorf("kept %d positions, want %d", n, maxPositions)
@@ -151,9 +151,9 @@ func TestDetectSettings(t *testing.T) {
 
 func TestUnfinished(t *testing.T) {
 	s := Load("")
-	s.SetPosition("/old.cbz", 4, "p4.png", 20)
-	s.SetPosition("/finished.cbz", 0, "", 20)
-	s.SetPosition("/new.cbz", 9, "p9.png", 0)
+	s.SetPosition("/old.cbz", Position{Page: 4, Name: "p4.png", PageCount: 20})
+	s.SetPosition("/finished.cbz", Position{PageCount: 20})
+	s.SetPosition("/new.cbz", Position{Page: 9, Name: "p9.png"})
 	// Make the order certain whatever the clock's resolution.
 	p := s.data.Positions["/old.cbz"]
 	p.Time = p.Time.Add(-time.Minute)
@@ -173,5 +173,19 @@ func TestUnfinished(t *testing.T) {
 	s.SetRememberPosition(false)
 	if got := s.Unfinished(); len(got) != 0 {
 		t.Errorf("Unfinished with positions off = %v, want none", got)
+	}
+}
+
+func TestForgetPosition(t *testing.T) {
+	s := Load("")
+	s.SetPosition("/a.cbz", Position{Page: 3})
+	if err := s.ForgetPosition("/a.cbz"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := s.Position("/a.cbz"); ok {
+		t.Error("position should be forgotten")
+	}
+	if err := s.ForgetPosition("/never.cbz"); err != nil {
+		t.Errorf("forgetting an unknown book: %v", err)
 	}
 }

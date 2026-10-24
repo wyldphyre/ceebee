@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"ceebee/book"
 	"ceebee/settings"
@@ -37,8 +38,9 @@ type ReaderService struct {
 	window   *application.WebviewWindow
 	settings *settings.Store
 	onOpen   func() // called after a book opens
-	// called when the recent list changes without a book opening
-	onRecentChanged func()
+	// called when Open Recent's or Resume's books change without a book
+	// opening
+	onListsChanged func()
 
 	mu       sync.RWMutex
 	book     *book.Book
@@ -143,8 +145,12 @@ func (s *ReaderService) forgetRecent(path string) {
 	if err := s.settings.RemoveRecent(path); err != nil {
 		log.Printf("saving recent files: %v", err)
 	}
-	if s.onRecentChanged != nil {
-		s.onRecentChanged()
+	s.listsChanged()
+}
+
+func (s *ReaderService) listsChanged() {
+	if s.onListsChanged != nil {
+		s.onListsChanged()
 	}
 }
 
@@ -196,22 +202,77 @@ func (s *ReaderService) SaveViewSettings(v settings.View) {
 func (s *ReaderService) SavePosition(bookID string, page int) {
 	s.mu.RLock()
 	path, current := s.bookPath, bookID == s.bookID
-	name, count := "", 0
-	// Page 0 is saved without a name: it means the start of the book, which
-	// stays page 0 whatever the order.
+	pos := settings.Position{Page: page}
 	if current {
-		count = s.book.PageCount()
+		pos.PageCount, pos.Title = s.book.PageCount(), s.book.Title
+		// Page 0 is saved without a name: it means the start of the book,
+		// which stays page 0 whatever the order.
 		if page > 0 {
-			name = s.book.PageName(page)
+			pos.Name = s.book.PageName(page)
 		}
 	}
 	s.mu.RUnlock()
 	if !current {
 		return
 	}
-	if err := s.settings.SetPosition(path, page, name, count); err != nil {
+	if err := s.settings.SetPosition(path, pos); err != nil {
 		log.Printf("saving reading position: %v", err)
 	}
+}
+
+// UnfinishedBook is a book left part-way through, for the opening screen.
+type UnfinishedBook struct {
+	Path      string    `json:"path"`
+	Title     string    `json:"title"`
+	Page      int       `json:"page"`      // index of the page reached
+	PageCount int       `json:"pageCount"` // 0 if not known
+	Time      time.Time `json:"time"`      // when it was last read
+}
+
+// maxResume is how many unfinished books File › Resume and the opening
+// screen list.
+const maxResume = 10
+
+// UnfinishedBooks returns the books left part-way through, most recently
+// read first, leaving out the open book.
+func (s *ReaderService) UnfinishedBooks() []UnfinishedBook {
+	current := s.currentPath()
+	books := []UnfinishedBook{}
+	for _, b := range s.settings.Unfinished() {
+		if b.Path == current {
+			continue
+		}
+		if len(books) == maxResume {
+			break
+		}
+		books = append(books, UnfinishedBook{
+			Path:      b.Path,
+			Title:     unfinishedTitle(b),
+			Page:      b.Page,
+			PageCount: b.PageCount,
+			Time:      b.Time,
+		})
+	}
+	return books
+}
+
+// unfinishedTitle is the book's title, or for positions saved before titles
+// were, its file name without the extension.
+func unfinishedTitle(b settings.Unfinished) string {
+	if b.Title != "" {
+		return b.Title
+	}
+	base := filepath.Base(b.Path)
+	return strings.TrimSuffix(base, filepath.Ext(base))
+}
+
+// ForgetPosition drops the saved position in a book, removing it from the
+// lists of unfinished books.
+func (s *ReaderService) ForgetPosition(path string) {
+	if err := s.settings.ForgetPosition(path); err != nil {
+		log.Printf("saving settings: %v", err)
+	}
+	s.listsChanged()
 }
 
 // ScreenArea is the usable area of the screen the window is on, without the

@@ -23,6 +23,9 @@ type View struct {
 	TwoPage      bool   `json:"twoPage"`
 	ScaleMode    string `json:"scaleMode"` // "window", "width" or "original"
 	ShowProgress bool   `json:"showProgress"`
+	// ResumeCollapsed folds the opening screen's list of unfinished books
+	// down to its heading.
+	ResumeCollapsed bool `json:"resumeCollapsed"`
 }
 
 // Position is where reading stopped in a book.
@@ -31,9 +34,10 @@ type Position struct {
 	// Name is the page's entry name in the archive, which finds the page
 	// again if the pages' order changes. Empty for the first page.
 	Name string `json:"name,omitempty"`
-	// PageCount is the book's number of pages, for showing how far through
-	// it the position is. Zero for positions saved before it was recorded.
+	// PageCount and Title describe the book in lists of unfinished books.
+	// They are empty for positions saved before they were recorded.
 	PageCount int       `json:"pageCount,omitempty"`
+	Title     string    `json:"title,omitempty"`
 	Time      time.Time `json:"time"`
 }
 
@@ -165,19 +169,31 @@ func (s *Store) Position(book string) (Position, bool) {
 	return p, ok
 }
 
-// SetPosition saves the page reached in a book, by index and entry name,
-// with the book's page count. It does nothing when positions are not being
-// remembered.
-func (s *Store) SetPosition(book string, page int, name string, pageCount int) error {
+// SetPosition saves the position reached in a book, stamped with the current
+// time. It does nothing when positions are not being remembered.
+func (s *Store) SetPosition(book string, p Position) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.data.RememberPosition {
 		return nil
 	}
-	s.data.Positions[book] = Position{Page: page, Name: name, PageCount: pageCount, Time: time.Now()}
+	p.Time = time.Now()
+	s.data.Positions[book] = p
 	if len(s.data.Positions) > maxPositions {
 		s.prune()
 	}
+	return s.save()
+}
+
+// ForgetPosition drops the saved position in a book, so it opens at the
+// start next time.
+func (s *Store) ForgetPosition(book string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.data.Positions[book]; !ok {
+		return nil
+	}
+	delete(s.data.Positions, book)
 	return s.save()
 }
 

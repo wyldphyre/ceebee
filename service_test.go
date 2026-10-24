@@ -90,7 +90,7 @@ func TestPageMiddleware(t *testing.T) {
 func TestOpenPathRecent(t *testing.T) {
 	s := newTestService()
 	changed := 0
-	s.onRecentChanged = func() { changed++ }
+	s.onListsChanged = func() { changed++ }
 
 	path := writeBook(t, 1)
 	if _, err := s.OpenPath(path); err != nil {
@@ -124,7 +124,7 @@ func TestOpenPathRecent(t *testing.T) {
 func TestOpenPathStartPage(t *testing.T) {
 	s := newTestService()
 	path := writeBook(t, 3)
-	s.settings.SetPosition(path, 2, "", 0)
+	s.settings.SetPosition(path, settings.Position{Page: 2})
 	info, err := s.OpenPath(path)
 	if err != nil {
 		t.Fatal(err)
@@ -134,7 +134,7 @@ func TestOpenPathStartPage(t *testing.T) {
 	}
 
 	// A saved position past the end, say after the book was edited, is ignored.
-	s.settings.SetPosition(path, 9, "", 0)
+	s.settings.SetPosition(path, settings.Position{Page: 9})
 	if info, _ = s.OpenPath(path); info.StartPage != 0 {
 		t.Errorf("StartPage = %d, want 0", info.StartPage)
 	}
@@ -170,7 +170,7 @@ func TestOpenPathFindsSavedPageByName(t *testing.T) {
 	}
 
 	// A saved name that is no longer in the book falls back to the index.
-	s.settings.SetPosition(path, 3, "gone.png", 0)
+	s.settings.SetPosition(path, settings.Position{Page: 3, Name: "gone.png"})
 	if info, _ = s.OpenPath(path); info.StartPage != 3 {
 		t.Errorf("StartPage = %d, want 3", info.StartPage)
 	}
@@ -216,5 +216,33 @@ func TestReopenKeepsPage(t *testing.T) {
 	}
 	if s.book.PageName(0) != "zz_cover.png" {
 		t.Errorf("first page = %q", s.book.PageName(0))
+	}
+}
+
+func TestUnfinishedBooks(t *testing.T) {
+	s := newTestService()
+	open := writeBook(t, 3)
+	s.settings.SetPosition("/comics/Old Book.cbz", settings.Position{Page: 4})
+	s.settings.SetPosition(open, settings.Position{Page: 1})
+	if _, err := s.OpenPath(open); err != nil {
+		t.Fatal(err)
+	}
+
+	// The open book is left out, and a position saved without a title
+	// shows the file name without its extension.
+	books := s.UnfinishedBooks()
+	if len(books) != 1 || books[0].Path != "/comics/Old Book.cbz" || books[0].Title != "Old Book" || books[0].Page != 4 {
+		t.Errorf("UnfinishedBooks = %+v, want just Old Book at page 4", books)
+	}
+
+	// Saving a position records the title and page count.
+	s.SavePosition(s.bookID, 2)
+	if pos, _ := s.settings.Position(open); pos.Title != "book" || pos.PageCount != 3 {
+		t.Errorf("saved position = %+v, want title book, 3 pages", pos)
+	}
+
+	s.ForgetPosition("/comics/Old Book.cbz")
+	if books := s.UnfinishedBooks(); len(books) != 0 {
+		t.Errorf("UnfinishedBooks after forgetting = %+v, want none", books)
 	}
 }

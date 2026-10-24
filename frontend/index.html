@@ -32,7 +32,16 @@
 <div class="content">
 <main id="reader" class="reader">
     <div id="spread" class="spread"></div>
-    <p id="empty" class="empty">Open a comic or drop a file here</p>
+    <div id="empty" class="empty">
+        <section id="resume" class="resume" hidden>
+            <button id="resume-heading" type="button" class="resume-heading" aria-expanded="true">
+                Continue Reading
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 6.25 8 9.75l3.5-3.5"/></svg>
+            </button>
+            <ul id="resume-list" class="resume-list"></ul>
+        </section>
+        <p class="empty-message">Open a comic or drop a file here</p>
+    </div>
     <div id="loading" class="loading" role="status" hidden>
         <span id="loading-message"></span>
         <div id="loading-bar" class="loading-bar" hidden><div id="loading-fill" class="loading-fill"></div></div>
