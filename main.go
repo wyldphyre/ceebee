@@ -27,6 +27,8 @@ func init() {
 	application.RegisterEvent[string]("open-file")
 	// Sent with the percentage of a book loaded while it opens.
 	application.RegisterEvent[int]("open-progress")
+	// Sent when the unfinished books' saved positions change from the menu.
+	application.RegisterEvent[application.Void]("unfinished-changed")
 	// Sent when About CeeBee is chosen from the menu.
 	application.RegisterEvent[application.Void]("show-about")
 	// Sent when File › Open… is chosen.
@@ -81,7 +83,7 @@ func main() {
 
 	menus := newMenus(app, reader)
 	reader.onOpen = menus.bookOpened
-	reader.onRecentChanged = menus.listsChanged
+	reader.onListsChanged = menus.listsChanged
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:            "Comic Reader",

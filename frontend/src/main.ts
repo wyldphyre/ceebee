@@ -1,5 +1,5 @@
 import {Browser, Events, Window} from "@wailsio/runtime";
-import {ReaderService, type BookInfo} from "../bindings/ceebee";
+import {ReaderService, type BookInfo, type UnfinishedBook} from "../bindings/ceebee";
 import "./style.css";
 
 const APP_TITLE = "Comic Reader";
@@ -17,6 +17,9 @@ const indicatorEl = document.getElementById("indicator")!;
 const readerEl = document.getElementById("reader")!;
 const spreadEl = document.getElementById("spread")!;
 const emptyEl = document.getElementById("empty")!;
+const resumeEl = document.getElementById("resume")!;
+const resumeHeadingEl = document.getElementById("resume-heading")!;
+const resumeListEl = document.getElementById("resume-list")!;
 const loadingEl = document.getElementById("loading")!;
 const loadingMessageEl = document.getElementById("loading-message")!;
 const loadingBarEl = document.getElementById("loading-bar")!;
@@ -41,6 +44,7 @@ let twoPage = true;
 let rtl = false;
 let showProgress = true;
 let showInfo = false;
+let resumeCollapsed = false;
 let scaleMode: ScaleMode = "window";
 let viewIndex = 0;
 let slots: Slot[] = [];
@@ -497,6 +501,86 @@ async function open(load: () => Promise<BookInfo | null>, name: string) {
     }
 }
 
+// Lists the unfinished books on the opening screen, hiding the list if there
+// are none.
+async function showUnfinished() {
+    const books = await ReaderService.UnfinishedBooks() ?? [];
+    resumeListEl.replaceChildren(...books.map(unfinishedItem));
+    resumeEl.hidden = books.length === 0;
+}
+
+function unfinishedItem(b: UnfinishedBook): HTMLElement {
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "resume-open";
+    open.title = b.path;
+    open.addEventListener("click", () => openPath(b.path));
+
+    const title = document.createElement("span");
+    title.className = "resume-title";
+    title.textContent = b.title;
+    const page = document.createElement("span");
+    page.className = "resume-page";
+    page.textContent = b.pageCount ? `p. ${b.page + 1} / ${b.pageCount}` : `p. ${b.page + 1}`;
+    // Positions saved before page counts were have no bar, but the cell
+    // keeps the time in its column.
+    const bar = document.createElement("div");
+    if (b.pageCount) {
+        bar.className = "resume-bar";
+        const fill = document.createElement("div");
+        fill.className = "resume-fill";
+        fill.style.width = `${Math.min(100, (b.page + 1) / b.pageCount * 100)}%`;
+        bar.append(fill);
+    }
+    const time = document.createElement("span");
+    time.className = "resume-time";
+    time.textContent = timeAgo(new Date(b.time));
+    open.append(title, page, bar, time);
+
+    const forget = document.createElement("button");
+    forget.type = "button";
+    forget.className = "resume-forget";
+    forget.textContent = "×";
+    forget.title = "Forget reading position";
+    forget.setAttribute("aria-label", `Forget reading position in ${b.title}`);
+    forget.addEventListener("click", () => ReaderService.ForgetPosition(b.path).then(showUnfinished));
+
+    const item = document.createElement("li");
+    item.append(open, forget);
+    return item;
+}
+
+// Describes how long ago a time was: "5 minutes ago", "yesterday".
+function timeAgo(time: Date): string {
+    const format = new Intl.RelativeTimeFormat(undefined, {numeric: "auto"});
+    const minutes = Math.round((time.getTime() - Date.now()) / 60000);
+    if (Math.abs(minutes) < 1) return "just now";
+    if (Math.abs(minutes) < 60) return format.format(minutes, "minute");
+    const hours = Math.round(minutes / 60);
+    if (Math.abs(hours) < 24) return format.format(hours, "hour");
+    const days = Math.round(hours / 24);
+    if (Math.abs(days) < 30) return format.format(days, "day");
+    const months = Math.round(days / 30);
+    if (Math.abs(months) < 12) return format.format(months, "month");
+    return format.format(Math.round(days / 365), "year");
+}
+
+function setResumeCollapsed(collapsed: boolean) {
+    resumeCollapsed = collapsed;
+    resumeHeadingEl.setAttribute("aria-expanded", String(!collapsed));
+    resumeListEl.hidden = collapsed;
+}
+
+resumeHeadingEl.addEventListener("click", () => {
+    setResumeCollapsed(!resumeCollapsed);
+    saveViewSettings();
+});
+
+// Remember Reading Position was turned off, forgetting every position.
+Events.On("unfinished-changed", () => {
+    if (!book) showUnfinished();
+});
+
 function openPath(path: string) {
     open(() => ReaderService.OpenPath(path), path.split(/[\\/]/).pop() || path);
 }
@@ -637,7 +721,7 @@ Events.On("page-order-changed", () => {
 Events.On("open-file", (e) => openPath(e.data));
 
 function saveViewSettings() {
-    ReaderService.SaveViewSettings({twoPage, scaleMode, showProgress});
+    ReaderService.SaveViewSettings({twoPage, scaleMode, showProgress, resumeCollapsed});
 }
 
 // Restore the saved settings before opening any startup file.
@@ -648,7 +732,10 @@ ReaderService.ViewSettings().then((view) => {
     if (["window", "width", "original"].includes(view.scaleMode)) {
         scaleMode = view.scaleMode as ScaleMode;
     }
+    setResumeCollapsed(view.resumeCollapsed);
     updateToolbar();
 }).finally(() => ReaderService.StartupPath().then((path) => {
+    // Opening a book hides the opening screen, so it isn't filled in then.
     if (path) openPath(path);
+    else showUnfinished();
 }));
