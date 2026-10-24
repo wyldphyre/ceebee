@@ -38,6 +38,14 @@ var ErrUnsupported = errors.New("unsupported or unreadable file")
 // ErrNoPages is returned when an archive contains no images.
 var ErrNoPages = errors.New("archive contains no images")
 
+// maxBookBytes limits how much a CBR, CB7 or CBT book's pages can add up to,
+// since they are read into memory, so a huge or damaged archive can't use it
+// all up. A variable so tests can lower it.
+var maxBookBytes int64 = 2 << 30
+
+// ErrTooLarge is returned when a book read into memory is over maxBookBytes.
+var ErrTooLarge = errors.New("book is too large to open: its pages add up to more than 2 GB")
+
 var imageTypes = map[string]string{
 	".jpg":  "image/jpeg",
 	".jpeg": "image/jpeg",
@@ -141,6 +149,9 @@ func Open(filename string, opts Options) (*Book, error) {
 	}
 	if err != nil {
 		b.Close()
+		if errors.Is(err, ErrTooLarge) {
+			return nil, err
+		}
 		return nil, fmt.Errorf("%w: %v", ErrUnsupported, err)
 	}
 
@@ -256,18 +267,24 @@ func (b *Book) openZip(filename string) ([]string, error) {
 // It reports how far through the file it has read to p, which may be nil.
 type walkFunc func(filename string, p *progress, visit func(name string, r io.Reader) error) error
 
-// readAll reads every page and ComicInfo.xml into memory.
+// readAll reads every page and ComicInfo.xml into memory, up to
+// maxBookBytes in all.
 func (b *Book) readAll(filename string, p *progress, walk walkFunc) ([]string, error) {
 	b.data = make(map[string][]byte)
 	var names []string
+	var total int64
 	err := walk(filename, p, func(name string, r io.Reader) error {
 		names = append(names, name)
 		if !isPage(name) && !isComicInfo(name) {
 			return nil
 		}
-		data, err := io.ReadAll(r)
+		// Read at most one byte past the limit, to tell if it's over.
+		data, err := io.ReadAll(io.LimitReader(r, maxBookBytes-total+1))
 		if err != nil {
 			return err
+		}
+		if total += int64(len(data)); total > maxBookBytes {
+			return ErrTooLarge
 		}
 		b.data[name] = data
 		return nil

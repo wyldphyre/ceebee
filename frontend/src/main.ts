@@ -475,6 +475,10 @@ function showAbout() {
 let loadToken = 0;
 let loadingTimer = 0;
 
+// The openSeq of the book being shown. Go numbers opens as they start, and a
+// book with a lower number finished opening after a newer one, so is ignored.
+let shownSeq = 0;
+
 // Opens a book, showing a loading message named for it if that takes a while.
 async function open(load: () => Promise<BookInfo | null>, name: string) {
     const token = ++loadToken;
@@ -489,7 +493,10 @@ async function open(load: () => Promise<BookInfo | null>, name: string) {
     }, 150);
     try {
         const info = await load();
-        if (info) setBook(info);
+        if (info && info.openSeq > shownSeq) {
+            shownSeq = info.openSeq;
+            setBook(info);
+        }
     } catch (err) {
         showError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -661,6 +668,11 @@ document.addEventListener("focusin", (e) => {
 window.addEventListener("keydown", (e) => {
     // Cmd/Ctrl+I isn't handled here: View › Show Info's shortcut covers it.
     if (aboutEl.open) return;
+    // Space presses a button that was tabbed to. Buttons only keep the focus
+    // when tabbed to (see the focusin handler), so otherwise Space turns the
+    // page. On macOS the Go menu's Space shortcut takes the key first, even
+    // while it is disabled, so this only matters on Windows and Linux.
+    if (e.key === " " && document.activeElement instanceof HTMLButtonElement) return;
     let action: Action | null = null;
     if (e.key === " ") action = e.shiftKey ? "previous" : "next";
     else if (e.key === "ArrowRight") action = "right";
