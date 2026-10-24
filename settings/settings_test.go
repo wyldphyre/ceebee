@@ -189,3 +189,46 @@ func TestForgetPosition(t *testing.T) {
 		t.Errorf("forgetting an unknown book: %v", err)
 	}
 }
+
+func TestFindMoved(t *testing.T) {
+	s := Load("")
+	s.SetPosition("/comics/Book.cbz", Position{Page: 3, Size: 100})
+	s.SetPosition("/old/Moved.cbz", Position{Page: 5, Size: 200})
+	s.SetPosition("/comics/Renamed.cbz", Position{Page: 7, Size: 300})
+	s.SetPosition("/comics/Unsized.cbz", Position{Page: 2})
+	missing := func(string) bool { return false }
+	present := func(string) bool { return true }
+
+	cases := []struct {
+		name   string
+		path   string
+		size   int64
+		exists func(string) bool
+		want   string
+	}{
+		{"case change, old path still found", "/comics/Book.CBZ", 100, present, "/comics/Book.cbz"},
+		{"case change, different size", "/comics/Book.CBZ", 999, missing, ""},
+		{"moved folder, same name", "/new/moved.CBZ", 200, missing, "/old/Moved.cbz"},
+		{"moved folder, old file still there", "/new/Moved.cbz", 200, present, ""},
+		{"renamed in same folder", "/comics/New Name.cbz", 300, missing, "/comics/Renamed.cbz"},
+		{"different name and folder", "/other/Other.cbz", 300, missing, ""},
+		{"no size saved, case change", "/comics/Unsized.CBZ", 50, missing, "/comics/Unsized.cbz"},
+		{"no size saved, moved", "/new/Unsized.cbz", 50, missing, ""},
+	}
+	for _, c := range cases {
+		got, ok := s.FindMoved(c.path, c.size, c.exists)
+		if got != c.want || ok != (c.want != "") {
+			t.Errorf("%s: FindMoved = %q, %v; want %q", c.name, got, ok, c.want)
+		}
+	}
+
+	if err := s.MovePosition("/old/Moved.cbz", "/new/Moved.cbz"); err != nil {
+		t.Fatal(err)
+	}
+	if p, ok := s.Position("/new/Moved.cbz"); !ok || p.Page != 5 {
+		t.Errorf("moved position = %+v, %v; want page 5", p, ok)
+	}
+	if _, ok := s.Position("/old/Moved.cbz"); ok {
+		t.Error("old position should be gone")
+	}
+}

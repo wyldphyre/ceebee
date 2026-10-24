@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -36,9 +37,12 @@ type Position struct {
 	Name string `json:"name,omitempty"`
 	// PageCount and Title describe the book in lists of unfinished books.
 	// They are empty for positions saved before they were recorded.
-	PageCount int       `json:"pageCount,omitempty"`
-	Title     string    `json:"title,omitempty"`
-	Time      time.Time `json:"time"`
+	PageCount int    `json:"pageCount,omitempty"`
+	Title     string `json:"title,omitempty"`
+	// Size is the book's file size in bytes, which helps find its position
+	// again after the file is renamed or moved. Zero if not recorded.
+	Size int64     `json:"size,omitempty"`
+	Time time.Time `json:"time"`
 }
 
 // Unfinished is a book with a saved position part-way through it.
@@ -182,6 +186,62 @@ func (s *Store) SetPosition(book string, p Position) error {
 	if len(s.data.Positions) > maxPositions {
 		s.prune()
 	}
+	return s.save()
+}
+
+// FindMoved looks for the saved position of a book that has been renamed or
+// moved to path, and returns the book's old path. A position matches when its
+// file size is the same as size and its old path:
+//   - is path, ignoring case, as after renaming Book.cbz to Book.CBZ (on a
+//     case-insensitive disk the old path still seems to exist); or
+//   - is missing (exists returns false) and has the same file name ignoring
+//     case, or is in the same folder.
+//
+// Positions saved without a size only match paths that differ in case. The
+// most recently read match wins. exists is only called for matching
+// candidates, so slow or missing disks are checked as little as possible.
+func (s *Store) FindMoved(path string, size int64, exists func(string) bool) (string, bool) {
+	s.mu.Lock()
+	var candidates []string
+	for old, p := range s.data.Positions {
+		if old == path {
+			continue
+		}
+		if strings.EqualFold(old, path) && (p.Size == 0 || p.Size == size) {
+			s.mu.Unlock()
+			return old, true
+		}
+		if p.Size == 0 || p.Size != size {
+			continue
+		}
+		if strings.EqualFold(filepath.Base(old), filepath.Base(path)) || filepath.Dir(old) == filepath.Dir(path) {
+			candidates = append(candidates, old)
+		}
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		return s.data.Positions[candidates[i]].Time.After(s.data.Positions[candidates[j]].Time)
+	})
+	s.mu.Unlock()
+	// Checking the disk can be slow, so it's done without the lock.
+	for _, old := range candidates {
+		if !exists(old) {
+			return old, true
+		}
+	}
+	return "", false
+}
+
+// MovePosition moves a book's saved position from its old path to its new
+// one.
+func (s *Store) MovePosition(from, to string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.data.Positions[from]
+	if !ok {
+		return nil
+	}
+	delete(s.data.Positions, from)
+	s.data.Positions[to] = p
 	return s.save()
 }
 
