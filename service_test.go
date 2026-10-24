@@ -124,7 +124,7 @@ func TestOpenPathRecent(t *testing.T) {
 func TestOpenPathStartPage(t *testing.T) {
 	s := newTestService()
 	path := writeBook(t, 3)
-	s.settings.SetPosition(path, 2, "")
+	s.settings.SetPosition(path, 2, "", 0)
 	info, err := s.OpenPath(path)
 	if err != nil {
 		t.Fatal(err)
@@ -134,7 +134,7 @@ func TestOpenPathStartPage(t *testing.T) {
 	}
 
 	// A saved position past the end, say after the book was edited, is ignored.
-	s.settings.SetPosition(path, 9, "")
+	s.settings.SetPosition(path, 9, "", 0)
 	if info, _ = s.OpenPath(path); info.StartPage != 0 {
 		t.Errorf("StartPage = %d, want 0", info.StartPage)
 	}
@@ -159,6 +159,9 @@ func TestOpenPathFindsSavedPageByName(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.SavePosition(info.BookID, 1)
+	if pos, _ := s.settings.Position(path); pos.PageCount != info.PageCount {
+		t.Errorf("saved PageCount = %d, want %d", pos.PageCount, info.PageCount)
+	}
 
 	// With cover detection on, 02.png is at index 2 the next time.
 	s.settings.SetDetectCovers(true)
@@ -167,7 +170,7 @@ func TestOpenPathFindsSavedPageByName(t *testing.T) {
 	}
 
 	// A saved name that is no longer in the book falls back to the index.
-	s.settings.SetPosition(path, 3, "gone.png")
+	s.settings.SetPosition(path, 3, "gone.png", 0)
 	if info, _ = s.OpenPath(path); info.StartPage != 3 {
 		t.Errorf("StartPage = %d, want 3", info.StartPage)
 	}

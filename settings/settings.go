@@ -30,8 +30,17 @@ type Position struct {
 	Page int `json:"page"`
 	// Name is the page's entry name in the archive, which finds the page
 	// again if the pages' order changes. Empty for the first page.
-	Name string    `json:"name,omitempty"`
-	Time time.Time `json:"time"`
+	Name string `json:"name,omitempty"`
+	// PageCount is the book's number of pages, for showing how far through
+	// it the position is. Zero for positions saved before it was recorded.
+	PageCount int       `json:"pageCount,omitempty"`
+	Time      time.Time `json:"time"`
+}
+
+// Unfinished is a book with a saved position part-way through it.
+type Unfinished struct {
+	Path string
+	Position
 }
 
 type file struct {
@@ -156,19 +165,39 @@ func (s *Store) Position(book string) (Position, bool) {
 	return p, ok
 }
 
-// SetPosition saves the page reached in a book, by index and entry name. It
-// does nothing when positions are not being remembered.
-func (s *Store) SetPosition(book string, page int, name string) error {
+// SetPosition saves the page reached in a book, by index and entry name,
+// with the book's page count. It does nothing when positions are not being
+// remembered.
+func (s *Store) SetPosition(book string, page int, name string, pageCount int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.data.RememberPosition {
 		return nil
 	}
-	s.data.Positions[book] = Position{Page: page, Name: name, Time: time.Now()}
+	s.data.Positions[book] = Position{Page: page, Name: name, PageCount: pageCount, Time: time.Now()}
 	if len(s.data.Positions) > maxPositions {
 		s.prune()
 	}
 	return s.save()
+}
+
+// Unfinished returns the books left part-way through, most recently read
+// first. Finishing a book saves its position as the first page, so those
+// with a later page are unfinished.
+func (s *Store) Unfinished() []Unfinished {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var books []Unfinished
+	if !s.data.RememberPosition {
+		return books
+	}
+	for path, p := range s.data.Positions {
+		if p.Page > 0 {
+			books = append(books, Unfinished{Path: path, Position: p})
+		}
+	}
+	sort.Slice(books, func(i, j int) bool { return books[i].Time.After(books[j].Time) })
+	return books
 }
 
 // Recent returns the recently opened books, newest first.

@@ -196,17 +196,20 @@ func (s *ReaderService) SaveViewSettings(v settings.View) {
 func (s *ReaderService) SavePosition(bookID string, page int) {
 	s.mu.RLock()
 	path, current := s.bookPath, bookID == s.bookID
-	name := ""
+	name, count := "", 0
 	// Page 0 is saved without a name: it means the start of the book, which
 	// stays page 0 whatever the order.
-	if current && page > 0 {
-		name = s.book.PageName(page)
+	if current {
+		count = s.book.PageCount()
+		if page > 0 {
+			name = s.book.PageName(page)
+		}
 	}
 	s.mu.RUnlock()
 	if !current {
 		return
 	}
-	if err := s.settings.SetPosition(path, page, name); err != nil {
+	if err := s.settings.SetPosition(path, page, name, count); err != nil {
 		log.Printf("saving reading position: %v", err)
 	}
 }

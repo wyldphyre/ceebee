@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestDefaults(t *testing.T) {
@@ -45,7 +46,7 @@ func TestRoundTrip(t *testing.T) {
 	if err := s.SetView(view); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetPosition("/comics/a.cbz", 12, "p12.png"); err != nil {
+	if err := s.SetPosition("/comics/a.cbz", 12, "p12.png", 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -64,11 +65,11 @@ func TestRoundTrip(t *testing.T) {
 func TestRememberPositionOff(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	s := Load(path)
-	s.SetPosition("/a.cbz", 5, "")
+	s.SetPosition("/a.cbz", 5, "", 0)
 	if err := s.SetRememberPosition(false); err != nil {
 		t.Fatal(err)
 	}
-	s.SetPosition("/b.cbz", 7, "")
+	s.SetPosition("/b.cbz", 7, "", 0)
 
 	s = Load(path)
 	if s.RememberPosition() {
@@ -86,7 +87,7 @@ func TestRememberPositionOff(t *testing.T) {
 func TestPrune(t *testing.T) {
 	s := Load(filepath.Join(t.TempDir(), "settings.json"))
 	for i := 0; i <= maxPositions; i++ {
-		s.SetPosition(fmt.Sprintf("/book%d.cbz", i), i, "")
+		s.SetPosition(fmt.Sprintf("/book%d.cbz", i), i, "", 0)
 	}
 	if n := len(s.data.Positions); n != maxPositions {
 		t.Errorf("kept %d positions, want %d", n, maxPositions)
@@ -145,5 +146,32 @@ func TestDetectSettings(t *testing.T) {
 	s = Load(path)
 	if !s.DetectCovers() || !s.DetectCredits() {
 		t.Error("cover and credit detection should be saved")
+	}
+}
+
+func TestUnfinished(t *testing.T) {
+	s := Load("")
+	s.SetPosition("/old.cbz", 4, "p4.png", 20)
+	s.SetPosition("/finished.cbz", 0, "", 20)
+	s.SetPosition("/new.cbz", 9, "p9.png", 0)
+	// Make the order certain whatever the clock's resolution.
+	p := s.data.Positions["/old.cbz"]
+	p.Time = p.Time.Add(-time.Minute)
+	s.data.Positions["/old.cbz"] = p
+
+	var paths []string
+	for _, b := range s.Unfinished() {
+		paths = append(paths, b.Path)
+	}
+	if want := []string{"/new.cbz", "/old.cbz"}; !reflect.DeepEqual(paths, want) {
+		t.Errorf("Unfinished = %q, want %q", paths, want)
+	}
+	if b := s.Unfinished()[1]; b.Page != 4 || b.PageCount != 20 {
+		t.Errorf("old.cbz = page %d of %d, want 4 of 20", b.Page, b.PageCount)
+	}
+
+	s.SetRememberPosition(false)
+	if got := s.Unfinished(); len(got) != 0 {
+		t.Errorf("Unfinished with positions off = %v, want none", got)
 	}
 }
