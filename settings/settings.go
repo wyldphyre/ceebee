@@ -4,6 +4,7 @@ package settings
 
 import (
 	"encoding/json"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -78,8 +79,10 @@ func DefaultPath() (string, error) {
 }
 
 // Load reads the settings file at path. A missing or unreadable file gives
-// the defaults; any fields it lacks also keep their defaults. An empty path
-// keeps settings in memory only.
+// the defaults; any fields it lacks also keep their defaults. A file that
+// isn't valid is kept as path+".bad", since the next save would otherwise
+// replace it and lose every reading position. An empty path keeps settings
+// in memory only.
 func Load(path string) *Store {
 	s := &Store{
 		path: path,
@@ -89,7 +92,12 @@ func Load(path string) *Store {
 		},
 	}
 	if data, err := os.ReadFile(path); err == nil {
-		json.Unmarshal(data, &s.data)
+		if err := json.Unmarshal(data, &s.data); err != nil {
+			log.Printf("settings file %s is invalid, keeping it as %s.bad: %v", path, path, err)
+			if err := os.Rename(path, path+".bad"); err != nil {
+				log.Printf("keeping invalid settings file: %v", err)
+			}
+		}
 	}
 	if s.data.Positions == nil {
 		s.data.Positions = map[string]Position{}

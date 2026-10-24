@@ -209,3 +209,27 @@ func TestOpenReportsProgress(t *testing.T) {
 		})
 	}
 }
+
+func TestOpenTooLarge(t *testing.T) {
+	cbt := filepath.Join(t.TempDir(), "book.cbt")
+	writeTar(t, cbt)
+	defer func(old int64) { maxBookBytes = old }(maxBookBytes)
+
+	// The pages and ComicInfo.xml are read; notes.txt isn't.
+	var size int64
+	for _, f := range fixtureFiles {
+		if f.name != "notes.txt" {
+			size += int64(len(f.data))
+		}
+	}
+	maxBookBytes = size
+	if b, err := Open(cbt, Options{}); err != nil {
+		t.Errorf("Open at the limit: %v", err)
+	} else {
+		b.Close()
+	}
+	maxBookBytes = size - 1
+	if _, err := Open(cbt, Options{}); !errors.Is(err, ErrTooLarge) {
+		t.Errorf("Open over the limit = %v, want ErrTooLarge", err)
+	}
+}

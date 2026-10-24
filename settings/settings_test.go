@@ -25,6 +25,10 @@ func TestCorruptFileGivesDefaults(t *testing.T) {
 	if got := Load(path).View(); !got.TwoPage || got.ScaleMode != "window" {
 		t.Errorf("View = %+v", got)
 	}
+	// The bad file is kept, so the next save doesn't lose it.
+	if data, err := os.ReadFile(path + ".bad"); err != nil || string(data) != "{not json" {
+		t.Errorf("settings.json.bad = %q, %v; want the original file", data, err)
+	}
 }
 
 func TestPartialFileKeepsOtherDefaults(t *testing.T) {

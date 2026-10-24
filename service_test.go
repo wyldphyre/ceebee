@@ -284,3 +284,30 @@ func TestOpenPathFollowsRenamedBook(t *testing.T) {
 		t.Errorf("Recent = %q, still has the old path", recent)
 	}
 }
+
+func TestOpenPathSuperseded(t *testing.T) {
+	s := newTestService()
+	s.openSeq.Store(10)
+	first, err := s.OpenPath(writeBook(t, 2))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// An open that started before the shown book's open, but finished after
+	// it, is thrown away.
+	s.openSeq.Store(first.OpenSeq - 2)
+	stale, err := s.OpenPath(writeBook(t, 3))
+	if stale != nil || err != nil {
+		t.Errorf("stale open = %+v, %v; want nil, nil", stale, err)
+	}
+	if s.bookID != first.BookID {
+		t.Error("the stale book replaced the shown one")
+	}
+
+	// A newer open replaces it.
+	s.openSeq.Store(first.OpenSeq)
+	newer, err := s.OpenPath(writeBook(t, 3))
+	if err != nil || newer == nil || newer.OpenSeq <= first.OpenSeq || s.bookID != newer.BookID {
+		t.Errorf("newer open = %+v, %v; want it shown", newer, err)
+	}
+}

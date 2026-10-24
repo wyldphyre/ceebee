@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -33,6 +34,9 @@ type BookInfo struct {
 	Spreads    [][]int      `json:"spreads"`   // two-page mode spreads
 	Metadata   []book.Field `json:"metadata"`  // ComicInfo.xml fields, if any
 	StartPage  int          `json:"startPage"` // page to open at: the saved position, or 0
+	// OpenSeq orders opens, so the frontend can ignore a book that finished
+	// opening after a newer one.
+	OpenSeq uint64 `json:"openSeq"`
 }
 
 // ReaderService holds the open book and serves its pages.
@@ -50,6 +54,12 @@ type ReaderService struct {
 	bookID   string
 	bookPath string // absolute path, the key for its saved reading position
 	bookSize int64  // file size, saved with its position
+	bookSeq  uint64 // the openSeq of the open book
+
+	// Counts opens as they start. An open that finishes after a newer one
+	// has already been shown is thrown away, so a slow book can't replace
+	// one opened after it.
+	openSeq atomic.Uint64
 
 	// A file the OS asked us to open before the frontend was ready for it.
 	pendingPath   string
@@ -89,15 +99,17 @@ func comicPatterns(goos string) string {
 	return strings.Join(patterns, ";")
 }
 
-// OpenPath opens the book at path, replacing the current one.
+// OpenPath opens the book at path, replacing the current one. It returns nil
+// if a book opened after it was shown first.
 func (s *ReaderService) OpenPath(path string) (*BookInfo, error) {
+	seq := s.openSeq.Add(1)
 	if abs, err := filepath.Abs(path); err == nil {
 		path = abs
 	}
 	b, err := book.Open(path, book.Options{
 		DetectCovers:  s.settings.DetectCovers(),
 		DetectCredits: s.settings.DetectCredits(),
-		Progress:      s.progressReporter(),
+		Progress:      s.progressReporter(seq),
 	})
 	if err != nil {
 		// A book that has been moved or deleted is dropped from Open Recent.
@@ -128,8 +140,13 @@ func (s *ReaderService) OpenPath(path string) (*BookInfo, error) {
 	}
 
 	s.mu.Lock()
+	if seq < s.bookSeq {
+		s.mu.Unlock()
+		b.Close()
+		return nil, nil
+	}
 	old := s.book
-	s.book, s.bookID, s.bookPath, s.bookSize = b, id, path, size
+	s.book, s.bookID, s.bookPath, s.bookSize, s.bookSeq = b, id, path, size, seq
 	s.mu.Unlock()
 	if old != nil {
 		old.Close()
@@ -144,6 +161,7 @@ func (s *ReaderService) OpenPath(path string) (*BookInfo, error) {
 		Spreads:    book.BuildSpreads(b.PageCount(), b.CoverIndex, b.Alone),
 		Metadata:   b.Metadata,
 		StartPage:  start,
+		OpenSeq:    seq,
 	}
 	if err := s.settings.AddRecent(path); err != nil {
 		log.Printf("saving recent files: %v", err)
@@ -155,14 +173,15 @@ func (s *ReaderService) OpenPath(path string) (*BookInfo, error) {
 }
 
 // progressReporter returns a book.Options.Progress function that sends the
-// percentage loaded to the frontend, only when it changes.
-func (s *ReaderService) progressReporter() func(done, total int64) {
+// percentage loaded to the frontend, only when it changes, and only while
+// the open numbered seq is the latest to have started.
+func (s *ReaderService) progressReporter(seq uint64) func(done, total int64) {
 	if s.app == nil {
 		return nil
 	}
 	last := -1
 	return func(done, total int64) {
-		if total <= 0 {
+		if total <= 0 || s.openSeq.Load() != seq {
 			return
 		}
 		if percent := int(done * 100 / total); percent != last {
@@ -221,7 +240,7 @@ func (s *ReaderService) Reopen(page int) (*BookInfo, error) {
 		return nil, nil
 	}
 	info, err := s.OpenPath(path)
-	if err != nil {
+	if info == nil || err != nil {
 		return nil, err
 	}
 	s.mu.RLock()
