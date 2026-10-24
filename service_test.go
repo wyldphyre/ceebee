@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"ceebee/settings"
@@ -254,5 +255,32 @@ func TestComicPatterns(t *testing.T) {
 	want := "*.[cC][bB][zZ];*.[cC][bB][rR];*.[cC][bB]7;*.[cC][bB][tT]"
 	if got := comicPatterns("linux"); got != want {
 		t.Errorf("linux = %q, want %q", got, want)
+	}
+}
+
+func TestOpenPathFollowsRenamedBook(t *testing.T) {
+	s := newTestService()
+	path := writeBook(t, 3)
+	info, err := s.OpenPath(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.SavePosition(info.BookID, 2)
+
+	renamed := strings.TrimSuffix(path, ".cbz") + ".CBZ"
+	if err := os.Rename(path, renamed); err != nil {
+		t.Fatal(err)
+	}
+	if info, err = s.OpenPath(renamed); err != nil {
+		t.Fatal(err)
+	}
+	if info.StartPage != 2 {
+		t.Errorf("StartPage = %d, want 2", info.StartPage)
+	}
+	if _, ok := s.settings.Position(path); ok {
+		t.Error("the old path's position should have moved")
+	}
+	if recent := s.settings.Recent(); slices.Contains(recent, path) {
+		t.Errorf("Recent = %q, still has the old path", recent)
 	}
 }

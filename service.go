@@ -49,6 +49,7 @@ type ReaderService struct {
 	book     *book.Book
 	bookID   string
 	bookPath string // absolute path, the key for its saved reading position
+	bookSize int64  // file size, saved with its position
 
 	// A file the OS asked us to open before the frontend was ready for it.
 	pendingPath   string
@@ -105,6 +106,13 @@ func (s *ReaderService) OpenPath(path string) (*BookInfo, error) {
 		}
 		return nil, err
 	}
+	var size int64
+	if fi, err := os.Stat(path); err == nil {
+		size = fi.Size()
+	}
+	if _, ok := s.settings.Position(path); !ok {
+		s.adoptMovedPosition(path, size)
+	}
 	id := rand.Text()
 	start := 0
 	if pos, ok := s.settings.Position(path); ok {
@@ -121,7 +129,7 @@ func (s *ReaderService) OpenPath(path string) (*BookInfo, error) {
 
 	s.mu.Lock()
 	old := s.book
-	s.book, s.bookID, s.bookPath = b, id, path
+	s.book, s.bookID, s.bookPath, s.bookSize = b, id, path, size
 	s.mu.Unlock()
 	if old != nil {
 		old.Close()
@@ -161,6 +169,26 @@ func (s *ReaderService) progressReporter() func(done, total int64) {
 			last = percent
 			s.app.Event.Emit("open-progress", percent)
 		}
+	}
+}
+
+// adoptMovedPosition gives a book the saved position it had before it was
+// renamed or moved to path, if there is one, and drops its old path from
+// Open Recent.
+func (s *ReaderService) adoptMovedPosition(path string, size int64) {
+	exists := func(p string) bool {
+		_, err := os.Stat(p)
+		return !errors.Is(err, fs.ErrNotExist)
+	}
+	old, ok := s.settings.FindMoved(path, size, exists)
+	if !ok {
+		return
+	}
+	if err := s.settings.MovePosition(old, path); err != nil {
+		log.Printf("saving reading position: %v", err)
+	}
+	if err := s.settings.RemoveRecent(old); err != nil {
+		log.Printf("saving recent files: %v", err)
 	}
 }
 
@@ -228,7 +256,7 @@ func (s *ReaderService) SaveViewSettings(v settings.View) {
 func (s *ReaderService) SavePosition(bookID string, page int) {
 	s.mu.RLock()
 	path, current := s.bookPath, bookID == s.bookID
-	pos := settings.Position{Page: page}
+	pos := settings.Position{Page: page, Size: s.bookSize}
 	if current {
 		pos.PageCount, pos.Title = s.book.PageCount(), s.book.Title
 		// Page 0 is saved without a name: it means the start of the book,
