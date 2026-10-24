@@ -246,3 +246,13 @@ func TestUnfinishedBooks(t *testing.T) {
 		t.Errorf("UnfinishedBooks after forgetting = %+v, want none", books)
 	}
 }
+
+func TestComicPatterns(t *testing.T) {
+	if got, want := comicPatterns("darwin"), "*.cbz;*.cbr;*.cb7;*.cbt"; got != want {
+		t.Errorf("darwin = %q, want %q", got, want)
+	}
+	want := "*.[cC][bB][zZ];*.[cC][bB][rR];*.[cC][bB]7;*.[cC][bB][tT]"
+	if got := comicPatterns("linux"); got != want {
+		t.Errorf("linux = %q, want %q", got, want)
+	}
+}

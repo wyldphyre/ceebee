@@ -3,16 +3,19 @@ package main
 import (
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"ceebee/book"
 	"ceebee/settings"
@@ -58,8 +61,31 @@ type ReaderService struct {
 func (s *ReaderService) ChooseFile() (string, error) {
 	return s.app.Dialog.OpenFile().
 		SetTitle("Open Comic").
-		AddFilter("Comic Books", "*.cbz;*.cbr;*.cb7;*.cbt").
+		AddFilter("Comic Books", comicPatterns(runtime.GOOS)).
 		PromptForSingleSelection()
+}
+
+// comicPatterns is the Open dialog's filter for comic archives. GTK matches
+// patterns case-sensitively, so on Linux each letter is bracketed to also
+// list files like "Book.CBZ". macOS and Windows already ignore case.
+func comicPatterns(goos string) string {
+	exts := []string{"cbz", "cbr", "cb7", "cbt"}
+	patterns := make([]string, len(exts))
+	for i, ext := range exts {
+		if goos == "linux" {
+			var b strings.Builder
+			for _, r := range ext {
+				if upper := unicode.ToUpper(r); upper != r {
+					fmt.Fprintf(&b, "[%c%c]", r, upper)
+				} else {
+					b.WriteRune(r)
+				}
+			}
+			ext = b.String()
+		}
+		patterns[i] = "*." + ext
+	}
+	return strings.Join(patterns, ";")
 }
 
 // OpenPath opens the book at path, replacing the current one.
