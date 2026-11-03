@@ -659,11 +659,13 @@ document.getElementById("error-close")!.addEventListener("click", hideError);
 let tabbing = false;
 window.addEventListener("keydown", (e) => { if (e.key === "Tab") tabbing = true; }, true);
 window.addEventListener("pointerdown", () => tabbing = false, true);
-document.addEventListener("focusin", (e) => {
-    if (!tabbing && e.target instanceof HTMLButtonElement && !aboutEl.contains(e.target)) {
-        e.target.blur();
-    }
-});
+function dropButtonFocus(el: EventTarget | null) {
+    if (!tabbing && el instanceof HTMLButtonElement && !aboutEl.contains(el)) el.blur();
+}
+document.addEventListener("focusin", (e) => dropButtonFocus(e.target));
+// The window can become active while the page is still loading, before this
+// script runs, so a button may already have the focus.
+dropButtonFocus(document.activeElement);
 
 window.addEventListener("keydown", (e) => {
     // Cmd/Ctrl+I isn't handled here: View › Show Info's shortcut covers it.
