@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"sync/atomic"
 
 	"ceebee/settings"
 
@@ -29,6 +30,8 @@ func init() {
 	application.RegisterEvent[int]("open-progress")
 	// Sent when the unfinished books' saved positions change from the menu.
 	application.RegisterEvent[application.Void]("unfinished-changed")
+	// Sent when the book is closed by closing the window on macOS.
+	application.RegisterEvent[application.Void]("book-closed")
 	// Sent when About CeeBee is chosen from the menu.
 	application.RegisterEvent[application.Void]("show-about")
 	// Sent when File › Open… is chosen.
@@ -70,8 +73,11 @@ func main() {
 			Handler:    application.AssetFileServerFS(assets),
 			Middleware: application.ChainMiddleware(reader.pageMiddleware, iconMiddleware),
 		},
+		// The app keeps running when its window is closed, as Mac apps do;
+		// see keepRunningWhenClosed. Hiding the window would otherwise count
+		// as closing the last one and quit.
 		Mac: application.MacOptions{
-			ApplicationShouldTerminateAfterLastWindowClosed: true,
+			ApplicationShouldTerminateAfterLastWindowClosed: false,
 		},
 		// GNOME finds the window's icon through its desktop entry, which
 		// names this id as its StartupWMClass (see build/linux/Taskfile.yml).
@@ -83,6 +89,7 @@ func main() {
 
 	menus := newMenus(app, reader)
 	reader.onOpen = menus.bookOpened
+	reader.onClose = menus.bookClosed
 	reader.onListsChanged = menus.listsChanged
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
@@ -109,6 +116,10 @@ func main() {
 		}
 	})
 
+	if runtime.GOOS == "darwin" {
+		keepRunningWhenClosed(app, window, reader)
+	}
+
 	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
 		keepFocusOffMenuBar(window)
 	})
@@ -122,6 +133,25 @@ func main() {
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// keepRunningWhenClosed makes closing the window on macOS close the book and
+// hide the window, leaving the app running as Mac apps do. Clicking the Dock
+// icon shows the window again (Wails does this for hidden windows), and
+// opening a book from the menus or Finder shows it with the book. Quitting
+// still quits: Wails closes the windows while shutting down, after running
+// its shutdown tasks, so the hook steps aside then.
+func keepRunningWhenClosed(app *application.App, window *application.WebviewWindow, reader *ReaderService) {
+	var quitting atomic.Bool
+	app.OnShutdown(func() { quitting.Store(true) })
+	window.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
+		if quitting.Load() {
+			return
+		}
+		e.Cancel()
+		window.Hide()
+		reader.closeBook()
+	})
 }
 
 // iconMiddleware serves the app icon at /appicon.png for the About dialog.

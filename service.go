@@ -45,6 +45,7 @@ type ReaderService struct {
 	window   *application.WebviewWindow
 	settings *settings.Store
 	onOpen   func() // called after a book opens
+	onClose  func() // called after the book is closed
 	// called when Open Recent's or Resume's books change without a book
 	// opening
 	onListsChanged func()
@@ -208,6 +209,27 @@ func (s *ReaderService) adoptMovedPosition(path string, size int64) {
 	}
 	if err := s.settings.RemoveRecent(old); err != nil {
 		log.Printf("saving recent files: %v", err)
+	}
+}
+
+// closeBook closes the open book, if there is one, and tells the frontend to
+// go back to the opening screen. An open still under way is thrown away.
+func (s *ReaderService) closeBook() {
+	s.mu.Lock()
+	old := s.book
+	s.book, s.bookID, s.bookPath, s.bookSize = nil, "", "", 0
+	// Opens that started before now finish with a lower number than this,
+	// so are discarded; the next open gets this number and is shown.
+	s.bookSeq = s.openSeq.Load() + 1
+	s.mu.Unlock()
+	if old != nil {
+		old.Close()
+	}
+	if s.onClose != nil {
+		s.onClose()
+	}
+	if s.app != nil {
+		s.app.Event.Emit("book-closed")
 	}
 }
 
