@@ -75,6 +75,7 @@ type Book struct {
 	// CBZ: pages are read on demand from the open zip.
 	zr       *zip.ReadCloser
 	zipFiles map[string]*zip.File
+	cache    *pageCache // pages read ahead of time
 
 	// CBR, CB7, CBT: page bytes are read into memory when the book opens.
 	data map[string][]byte
@@ -287,6 +288,7 @@ func (b *Book) openZip(filename string) ([]string, error) {
 	})
 	b.zr = zr
 	b.zipFiles = make(map[string]*zip.File)
+	b.cache = newPageCache()
 	var names []string
 	for _, f := range zr.File {
 		if f.FileInfo().IsDir() {
@@ -472,7 +474,13 @@ func (b *Book) Page(index int) ([]byte, string, error) {
 		return nil, "", os.ErrNotExist
 	}
 	name := b.pages[index]
-	data, err := b.read(name)
+	var data []byte
+	var err error
+	if b.zr != nil {
+		data, err = b.zipPage(index)
+	} else {
+		data, err = b.read(name)
+	}
 	if err != nil {
 		return nil, "", err
 	}
@@ -482,6 +490,7 @@ func (b *Book) Page(index int) ([]byte, string, error) {
 // Close releases the archive.
 func (b *Book) Close() error {
 	if b.zr != nil {
+		b.cache.close()
 		return b.zr.Close()
 	}
 	return nil
