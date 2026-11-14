@@ -254,6 +254,18 @@ func (m *menus) bookOpened() {
 	m.refresh()
 }
 
+// bookClosed updates the menu items that depend on the open book, and adds
+// the closed book to Resume.
+func (m *menus) bookClosed() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.showInFile.SetEnabled(false)
+	for _, item := range m.goItems {
+		item.SetEnabled(false)
+	}
+	m.refresh()
+}
+
 // setInfoState updates Show Info in both menus to match the Info panel.
 func (m *menus) setInfoState(s InfoState) {
 	m.mu.Lock()

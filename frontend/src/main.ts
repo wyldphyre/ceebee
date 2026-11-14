@@ -498,6 +498,9 @@ let shownSeq = 0;
 // Opens a book, showing a loading message named for it if that takes a while.
 async function open(load: () => Promise<BookInfo | null>, name: string) {
     const token = ++loadToken;
+    // On macOS the window is hidden once closed, and opening a book from the
+    // menus or Finder brings it back.
+    Window.Show().then(() => Window.Focus());
     loadingMessageEl.textContent = `Loading “${name}”…`;
     loadingBarEl.hidden = true;
     loadingFillEl.style.width = "0";
@@ -523,6 +526,31 @@ async function open(load: () => Promise<BookInfo | null>, name: string) {
         }
     }
 }
+
+// Goes back to the opening screen. On macOS closing the window closes the
+// book and hides the window, ready to be shown again.
+function closeBook() {
+    book = null;
+    // Abandon any render, window fit or open under way.
+    renderToken++;
+    fitToken++;
+    loadToken++;
+    clearTimeout(loadingTimer);
+    loadingEl.hidden = true;
+    slots = [];
+    spreadEl.replaceChildren();
+    trimImages(new Set());
+    infoListEl.replaceChildren();
+    hideError();
+    document.title = APP_TITLE;
+    Window.SetTitle(APP_TITLE);
+    updateToolbar();
+    readerEl.scrollTo(0, 0);
+    emptyEl.hidden = false;
+    showUnfinished();
+}
+
+Events.On("book-closed", closeBook);
 
 // Lists the unfinished books on the opening screen, hiding the list if there
 // are none.

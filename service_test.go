@@ -311,3 +311,36 @@ func TestOpenPathSuperseded(t *testing.T) {
 		t.Errorf("newer open = %+v, %v; want it shown", newer, err)
 	}
 }
+
+func TestCloseBook(t *testing.T) {
+	s := newTestService()
+	closed := 0
+	s.onClose = func() { closed++ }
+	path := writeBook(t, 3)
+	info, err := s.OpenPath(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.SavePosition(info.BookID, 1)
+
+	// An open that started before the close, but finishes after it.
+	s.openSeq.Add(1)
+	stale := s.openSeq.Load()
+	s.closeBook()
+	if closed != 1 || s.book != nil || s.currentPath() != "" {
+		t.Errorf("after closeBook: closed=%d book=%v path=%q", closed, s.book, s.currentPath())
+	}
+	s.openSeq.Store(stale - 1)
+	if info, err := s.OpenPath(writeBook(t, 2)); info != nil || err != nil {
+		t.Errorf("open from before the close = %+v, %v; want it thrown away", info, err)
+	}
+
+	// The closed book is listed as unfinished, and opens again.
+	if books := s.UnfinishedBooks(); len(books) != 1 || books[0].Path != path {
+		t.Errorf("UnfinishedBooks = %+v, want the closed book", books)
+	}
+	s.openSeq.Store(stale)
+	if info, err := s.OpenPath(path); err != nil || info == nil || info.StartPage != 1 {
+		t.Errorf("reopening = %+v, %v; want it at page 1", info, err)
+	}
+}
