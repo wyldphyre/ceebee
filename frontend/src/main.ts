@@ -60,8 +60,10 @@ let stopIndex = 0;
 // turned quickly.
 let fitToken = 0;
 
-// Decoded images for the current and next views, keyed by URL.
-let images = new Map<string, Promise<HTMLImageElement | null>>();
+// Images for the current view and those either side of it, keyed by URL,
+// with a promise for each that resolves once it's decoded, or to null.
+type Loading = { img: HTMLImageElement; decoded: Promise<HTMLImageElement | null> };
+let images = new Map<string, Loading>();
 
 function views(): number[][] {
     if (!book) return [];
@@ -74,14 +76,25 @@ function pageURL(index: number): string {
 }
 
 function loadImage(url: string): Promise<HTMLImageElement | null> {
-    let promise = images.get(url);
-    if (!promise) {
+    let loading = images.get(url);
+    if (!loading) {
         const img = new Image();
         img.src = url;
-        promise = img.decode().then(() => img, () => null);
-        images.set(url, promise);
+        loading = {img, decoded: img.decode().then(() => img, () => null)};
+        images.set(url, loading);
     }
-    return promise;
+    return loading.decoded;
+}
+
+// Forgets the images not in keep, cancelling those still loading, so that
+// turning pages quickly doesn't leave skipped pages using the network. Images
+// still on screen are left to finish.
+function trimImages(keep: Set<string>) {
+    for (const [url, {img}] of images) {
+        if (keep.has(url)) continue;
+        images.delete(url);
+        if (!img.complete && !slots.some((s) => s.el === img)) img.src = "";
+    }
 }
 
 function placeholder(): HTMLElement {
@@ -100,6 +113,12 @@ async function render(atEnd = false) {
     // the book, so it opens at the start next time.
     ReaderService.SavePosition(book!.bookId, viewIndex === all.length - 1 ? 0 : pages[0]);
 
+    // Keep only this view's images and those either side of it. Go reads
+    // further ahead itself, without decoding, which takes less memory.
+    const next = all[viewIndex + 1] ?? [];
+    const previous = all[viewIndex - 1] ?? [];
+    trimImages(new Set([...pages, ...next, ...previous].map(pageURL)));
+
     const loaded = await Promise.all(pages.map((i) => loadImage(pageURL(i))));
     if (token !== renderToken) return;
 
@@ -112,12 +131,9 @@ async function render(atEnd = false) {
     // Start at the view's first scroll stop, or its last when going backwards.
     showStop(atEnd ? scrollStops().length - 1 : 0, false);
 
-    // Keep only the current view's images, then preload the next view.
-    const keep = new Set(pages.map(pageURL));
-    const next = all[viewIndex + 1] ?? [];
-    next.forEach((i) => keep.add(pageURL(i)));
-    images = new Map([...images].filter(([url]) => keep.has(url)));
-    next.forEach((i) => loadImage(pageURL(i)));
+    // Preload the views either side, the next first, so going back is as
+    // quick as going forward.
+    [...next, ...previous].forEach((i) => loadImage(pageURL(i)));
 
     // Fit the window to the new view. If it changed size, the pages have been
     // laid out again, so go back to the view's first (or last) scroll stop.
@@ -409,7 +425,7 @@ function setBook(info: BookInfo) {
     book = info;
     rtl = info.rtl;
     viewIndex = Math.max(0, views().findIndex((v) => v.includes(info.startPage)));
-    images = new Map();
+    trimImages(new Set());
     hideError();
     emptyEl.hidden = true;
     infoListEl.replaceChildren(...(info.metadata ?? []).flatMap((field) => {
