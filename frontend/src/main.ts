@@ -112,12 +112,14 @@ async function render(atEnd = false) {
     // Start at the view's first scroll stop, or its last when going backwards.
     showStop(atEnd ? scrollStops().length - 1 : 0, false);
 
-    // Keep only the current view's images, then preload the next view.
-    const keep = new Set(pages.map(pageURL));
+    // Keep only the current view's images and those either side of it, and
+    // preload those, the next view first. Going back is then as quick as
+    // going forward, which matters for books on a network.
     const next = all[viewIndex + 1] ?? [];
-    next.forEach((i) => keep.add(pageURL(i)));
+    const previous = all[viewIndex - 1] ?? [];
+    const keep = new Set([...pages, ...next, ...previous].map(pageURL));
     images = new Map([...images].filter(([url]) => keep.has(url)));
-    next.forEach((i) => loadImage(pageURL(i)));
+    [...next, ...previous].forEach((i) => loadImage(pageURL(i)));
 
     // Fit the window to the new view. If it changed size, the pages have been
     // laid out again, so go back to the view's first (or last) scroll stop.

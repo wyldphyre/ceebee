@@ -4,7 +4,9 @@ package book
 import (
 	"archive/tar"
 	"archive/zip"
+	"bufio"
 	"bytes"
+	"compress/flate"
 	"errors"
 	"fmt"
 	"image"
@@ -15,6 +17,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"unicode"
 
 	"github.com/bodgit/sevenzip"
@@ -187,20 +191,46 @@ func Open(filename string, opts Options) (*Book, error) {
 		b.CoverIndex = b.PageIndex(coverName)
 	}
 
-	// Measuring a CBZ's pages reads each one's header from the file, which
-	// is slow over a network, so it reports progress.
-	sizes := make([]image.Point, len(b.pages))
-	for i, name := range b.pages {
-		sizes[i] = b.pageSize(name)
-		if b.zr != nil && opts.Progress != nil {
-			opts.Progress(int64(i+1), int64(len(b.pages)))
-		}
-	}
-	b.Alone = WideFlags(sizes)
+	b.Alone = WideFlags(b.pageSizes(opts.Progress))
 	for _, name := range covers {
 		b.Alone[b.PageIndex(name)] = true
 	}
 	return b, nil
+}
+
+// sizeWorkers is how many pages are measured at once. Measuring a CBZ page
+// reads its header from the file, which mostly waits on the disk or network,
+// so measuring several at once is much faster over a network.
+const sizeWorkers = 8
+
+// pageSizes reads every page's dimensions, several at once. For a CBZ, whose
+// pages are read from the file, it reports progress after each page.
+func (b *Book) pageSizes(progress func(done, total int64)) []image.Point {
+	sizes := make([]image.Point, len(b.pages))
+	total := int64(len(b.pages))
+	var next atomic.Int64
+	var mu sync.Mutex // serialises progress calls
+	var done int64
+	var wg sync.WaitGroup
+	for range min(sizeWorkers, len(b.pages)) {
+		wg.Go(func() {
+			for {
+				i := next.Add(1) - 1
+				if i >= total {
+					return
+				}
+				sizes[i] = b.pageSize(b.pages[i])
+				if b.zr != nil && progress != nil {
+					mu.Lock()
+					done++
+					progress(done, total)
+					mu.Unlock()
+				}
+			}
+		})
+	}
+	wg.Wait()
+	return sizes
 }
 
 // movePages moves the pages whose file names contain word, or its plural, as
@@ -250,6 +280,11 @@ func (b *Book) openZip(filename string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Go's deflate reader reads the archive 4 KB at a time, so a 2 MB page
+	// takes hundreds of reads, each a round trip over a network.
+	zr.RegisterDecompressor(zip.Deflate, func(r io.Reader) io.ReadCloser {
+		return flate.NewReader(bufio.NewReaderSize(r, zipBufferSize))
+	})
 	b.zr = zr
 	b.zipFiles = make(map[string]*zip.File)
 	var names []string
@@ -262,6 +297,15 @@ func (b *Book) openZip(filename string) ([]string, error) {
 	}
 	return names, nil
 }
+
+// readBufferSize is how much of a CBR or CBT file is read at a time.
+const readBufferSize = 1 << 20
+
+// zipBufferSize is how much of a CBZ entry is read at a time. CBZ pages are
+// read one at a time as they're shown, and only their headers when a book
+// opens, so this is smaller than readBufferSize: big enough that most page
+// headers take one read.
+const zipBufferSize = 64 << 10
 
 // walkFunc calls visit for every regular file in an archive, in archive order.
 // It reports how far through the file it has read to p, which may be nil.
@@ -293,7 +337,9 @@ func (b *Book) readAll(filename string, p *progress, walk walkFunc) ([]string, e
 }
 
 func walkRar(filename string, p *progress, visit func(string, io.Reader) error) error {
-	var opts []rardecode.Option
+	// Comic archives are many megabytes, so read them in large pieces, which
+	// matters over a network.
+	opts := []rardecode.Option{rardecode.BufferSize(readBufferSize)}
 	if p != nil {
 		opts = append(opts, rardecode.FileSystem(trackedFS{p}))
 	}
@@ -362,7 +408,7 @@ func walkTar(filename string, p *progress, visit func(string, io.Reader) error) 
 		return err
 	}
 	defer f.Close()
-	tr := tar.NewReader(f)
+	tr := tar.NewReader(bufio.NewReaderSize(f, readBufferSize))
 	for {
 		h, err := tr.Next()
 		if err == io.EOF {
