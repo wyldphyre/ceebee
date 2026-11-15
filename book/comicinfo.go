@@ -109,12 +109,6 @@ func (ci *ComicInfo) IsRTL() bool {
 	return ci != nil && strings.TrimSpace(ci.Manga) == "YesAndRightToLeft"
 }
 
-// Cover returns the first valid FrontCover page index, or 0.
-func (ci *ComicInfo) Cover(pageCount int) int {
-	index, _ := ci.FrontCover(pageCount)
-	return index
-}
-
 // FrontCover returns the first valid FrontCover page index, and whether there
 // is one.
 func (ci *ComicInfo) FrontCover(pageCount int) (int, bool) {

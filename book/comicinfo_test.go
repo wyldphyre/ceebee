@@ -34,8 +34,8 @@ func TestFrontCover(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := ci.Cover(10); got != 3 {
-		t.Errorf("Cover = %d, want 3", got)
+	if got, ok := ci.FrontCover(10); got != 3 || !ok {
+		t.Errorf("FrontCover = %d, %v; want 3, true", got, ok)
 	}
 }
 
@@ -49,11 +49,11 @@ func TestFrontCoverOutOfRange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := ci.Cover(5); got != 4 {
-		t.Errorf("Cover = %d, want 4 (first valid)", got)
+	if got, ok := ci.FrontCover(5); got != 4 || !ok {
+		t.Errorf("FrontCover = %d, %v; want 4, true (first valid)", got, ok)
 	}
-	if got := ci.Cover(3); got != 0 {
-		t.Errorf("Cover = %d, want 0 (none valid)", got)
+	if got, ok := ci.FrontCover(3); got != 0 || ok {
+		t.Errorf("FrontCover = %d, %v; want 0, false (none valid)", got, ok)
 	}
 }
 
@@ -62,7 +62,7 @@ func TestMissingOrMalformed(t *testing.T) {
 		t.Error("expected parse error")
 	}
 	var ci *ComicInfo // missing or failed to parse
-	if ci.IsRTL() || ci.Cover(5) != 0 || ci.TitleOr("file") != "file" {
+	if _, ok := ci.FrontCover(5); ci.IsRTL() || ok || ci.TitleOr("file") != "file" {
 		t.Error("nil ComicInfo should give defaults")
 	}
 }

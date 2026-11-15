@@ -88,8 +88,8 @@ func main() {
 	reader.app = app
 
 	menus := newMenus(app, reader)
-	reader.onOpen = menus.bookOpened
-	reader.onClose = menus.bookClosed
+	reader.onOpen = func() { menus.setBookOpen(true) }
+	reader.onClose = func() { menus.setBookOpen(false) }
 	reader.onListsChanged = menus.listsChanged
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{

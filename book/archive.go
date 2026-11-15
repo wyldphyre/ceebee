@@ -173,8 +173,7 @@ func Open(filename string, opts Options) (*Book, error) {
 			b.Metadata, _ = ParseMetadata(data)
 		}
 	}
-	base := strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename))
-	b.Title = info.TitleOr(base)
+	b.Title = info.TitleOr(FileTitle(filename))
 	b.RTL = info.IsRTL()
 
 	// ComicInfo.xml numbers pages in their natural order, so note the cover
@@ -232,6 +231,13 @@ func (b *Book) pageSizes(progress func(done, total int64)) []image.Point {
 	}
 	wg.Wait()
 	return sizes
+}
+
+// FileTitle is a book's title when it has none of its own: its file name
+// without the extension.
+func FileTitle(path string) string {
+	base := filepath.Base(path)
+	return strings.TrimSuffix(base, filepath.Ext(base))
 }
 
 // movePages moves the pages whose file names contain word, or its plural, as
