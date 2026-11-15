@@ -357,8 +357,7 @@ func unfinishedTitle(b settings.Unfinished) string {
 	if b.Title != "" {
 		return b.Title
 	}
-	base := filepath.Base(b.Path)
-	return strings.TrimSuffix(base, filepath.Ext(base))
+	return book.FileTitle(b.Path)
 }
 
 // ForgetPosition drops the saved position in a book, removing it from the

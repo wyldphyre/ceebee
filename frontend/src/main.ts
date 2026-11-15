@@ -169,6 +169,13 @@ function layout() {
     if (readerEl.clientWidth !== width) fit();
 }
 
+// Lays the pages out again after the reading area changes size. The scroll
+// position no longer matches a stop, so Space continues from the nearest.
+function relayout() {
+    layout();
+    stopIndex = -1;
+}
+
 // The smallest reading area the window is fitted to, so that tiny or missing
 // pages don't shrink it to almost nothing.
 const MIN_READER_WIDTH = 400;
@@ -264,8 +271,7 @@ async function resizeToFit(): Promise<boolean> {
     if (!resized) return false;
     // Let the page catch up with the new window size before laying it out.
     await new Promise((resolve) => requestAnimationFrame(resolve));
-    layout();
-    stopIndex = -1;
+    relayout();
     return true;
 }
 
@@ -449,8 +455,7 @@ function setInfo(visible: boolean) {
     if (!book?.metadata?.length) return;
     showInfo = visible;
     updateToolbar();
-    layout();
-    stopIndex = -1;
+    relayout();
 }
 
 function toggleInfo() {
@@ -517,7 +522,7 @@ async function open(load: () => Promise<BookInfo | null>, name: string) {
             setBook(info);
         }
     } catch (err) {
-        showError(err instanceof Error ? err.message : String(err));
+        showError(err);
     } finally {
         if (token === loadToken) {
             clearTimeout(loadingTimer);
@@ -641,7 +646,7 @@ async function chooseFile() {
         const path = await ReaderService.ChooseFile();
         if (path) openPath(path);
     } catch (err) {
-        showError(err instanceof Error ? err.message : String(err));
+        showError(err);
     }
 }
 
@@ -650,8 +655,8 @@ Events.On("open-progress", (e) => {
     loadingFillEl.style.width = `${Math.min(100, e.data)}%`;
 });
 
-function showError(message: string) {
-    errorMessageEl.textContent = message;
+function showError(err: unknown) {
+    errorMessageEl.textContent = err instanceof Error ? err.message : String(err);
     errorEl.hidden = false;
 }
 
@@ -690,8 +695,7 @@ progressButton.addEventListener("click", () => {
     showProgress = !showProgress;
     saveViewSettings();
     updateToolbar();
-    layout();
-    stopIndex = -1;
+    relayout();
 });
 
 document.getElementById("error-close")!.addEventListener("click", hideError);
@@ -737,10 +741,7 @@ Events.On("navigate", (e) => {
 });
 Events.On("show-info", (e) => setInfo(e.data));
 
-window.addEventListener("resize", () => {
-    layout();
-    stopIndex = -1;
-});
+window.addEventListener("resize", relayout);
 
 // Scrolling by hand means Space continues from the nearest stop.
 readerEl.addEventListener("wheel", () => stopIndex = -1, {passive: true});
@@ -751,8 +752,7 @@ Events.On("show-about", showAbout);
 Events.On("show-open-dialog", chooseFile);
 Events.On("show-toolbar", (e) => {
     toolbarEl.hidden = !e.data;
-    layout();
-    stopIndex = -1;
+    relayout();
 });
 
 // Add the shortcuts to the tooltips, with the platform's modifier key.

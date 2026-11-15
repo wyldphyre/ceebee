@@ -243,25 +243,15 @@ func resumeLabel(b UnfinishedBook) string {
 	return label
 }
 
-// bookOpened updates the menu items that depend on the open book.
-func (m *menus) bookOpened() {
+// setBookOpen updates the menu items that depend on there being an open
+// book, and the book lists: an opened book leaves Resume, and a closed one
+// joins it.
+func (m *menus) setBookOpen(open bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.showInFile.SetEnabled(true)
+	m.showInFile.SetEnabled(open)
 	for _, item := range m.goItems {
-		item.SetEnabled(true)
-	}
-	m.refresh()
-}
-
-// bookClosed updates the menu items that depend on the open book, and adds
-// the closed book to Resume.
-func (m *menus) bookClosed() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.showInFile.SetEnabled(false)
-	for _, item := range m.goItems {
-		item.SetEnabled(false)
+		item.SetEnabled(open)
 	}
 	m.refresh()
 }
