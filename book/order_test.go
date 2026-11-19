@@ -67,10 +67,10 @@ func TestDetectCovers(t *testing.T) {
 		t.Errorf("CoverIndex = %d, want 0", b.CoverIndex)
 	}
 	// Every cover is shown on its own.
-	if wantAlone := []bool{true, true, true, false, false, false}; !reflect.DeepEqual(b.Alone, wantAlone) {
-		t.Errorf("Alone = %v, want %v", b.Alone, wantAlone)
+	if wantAlone := []bool{true, true, true, false, false, false}; !reflect.DeepEqual(b.MeasurePages(), wantAlone) {
+		t.Errorf("Alone = %v, want %v", b.MeasurePages(), wantAlone)
 	}
-	if got := BuildSpreads(b.PageCount(), b.CoverIndex, b.Alone); !reflect.DeepEqual(got, [][]int{{0}, {1}, {2}, {3, 4}, {5}}) {
+	if got := BuildSpreads(b.PageCount(), b.CoverIndex, b.MeasurePages()); !reflect.DeepEqual(got, [][]int{{0}, {1}, {2}, {3, 4}, {5}}) {
 		t.Errorf("spreads = %v", got)
 	}
 }
@@ -79,8 +79,8 @@ func TestDetectCoversMatchesWholeWords(t *testing.T) {
 	// "cover" inside another word, such as the series name, isn't a cover.
 	path := writeNamedBook(t, []string{"Discovery 01.png", "Discovery 02.png", "Undercover_03.png", "recovered.png"}, "")
 	b := openOrder(t, path, Options{DetectCovers: true})
-	if want := []bool{false, false, false, false}; !reflect.DeepEqual(b.Alone, want) {
-		t.Errorf("Alone = %v, want %v", b.Alone, want)
+	if want := []bool{false, false, false, false}; !reflect.DeepEqual(b.MeasurePages(), want) {
+		t.Errorf("Alone = %v, want %v", b.MeasurePages(), want)
 	}
 }
 

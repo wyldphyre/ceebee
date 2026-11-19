@@ -67,7 +67,7 @@ func TestOpenDetectsWidePages(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer b.Close()
-	if want := []bool{false, false, true, false, false}; !reflect.DeepEqual(b.Alone, want) {
-		t.Errorf("Alone = %v, want %v", b.Alone, want)
+	if want := []bool{false, false, true, false, false}; !reflect.DeepEqual(b.MeasurePages(), want) {
+		t.Errorf("Alone = %v, want %v", b.MeasurePages(), want)
 	}
 }

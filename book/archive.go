@@ -66,18 +66,24 @@ type Book struct {
 	CoverIndex int
 	RTL        bool
 	// Alone marks the pages shown on their own in two-page mode, besides the
-	// cover: wide pages, and the covers found by Options.DetectCovers.
+	// cover: wide pages, and the covers found by Options.DetectCovers. It is
+	// nil for a book read as its pages are shown, until MeasurePages is
+	// called.
 	Alone    []bool
 	Metadata []Field // ComicInfo.xml fields; nil if there is none
 
-	pages []string // entry names, sorted
+	pages  []string // entry names, sorted
+	covers []string // the pages moved to the front by Options.DetectCovers
 
-	// CBZ: pages are read on demand from the open zip.
+	// CBZ and non-solid CBR: pages are read as they're shown, through a
+	// cache that reads ahead.
 	zr       *zip.ReadCloser
 	zipFiles map[string]*zip.File
-	cache    *pageCache // pages read ahead of time
+	rarFiles map[string]*rardecode.File
+	cache    *pageCache
 
-	// CBR, CB7, CBT: page bytes are read into memory when the book opens.
+	// Solid CBR, CB7, CBT: page bytes are read into memory when the book
+	// opens.
 	data map[string][]byte
 }
 
@@ -116,9 +122,10 @@ type Options struct {
 	// DetectCredits moves pages whose file names contain the word "credit" or
 	// "credits" to the end.
 	DetectCredits bool
-	// Progress, if set, is called as the book opens with how much of the
-	// work is done and the total: bytes of the file read for CBR, CB7 and
-	// CBT, which are read whole, and pages measured for CBZ.
+	// Progress, if set, is called as the book opens with how many bytes of
+	// the file have been read and the file's size, for books read into
+	// memory: solid CBR, CB7 and CBT. CBZ and other CBR books open without
+	// reading their pages.
 	Progress func(done, total int64)
 }
 
@@ -144,7 +151,10 @@ func Open(filename string, opts Options) (*Book, error) {
 	case FormatZip:
 		names, err = b.openZip(filename)
 	case FormatRar:
-		names, err = b.readAll(filename, p, walkRar)
+		names, err = b.openRar(filename)
+		if errors.Is(err, errSolid) {
+			names, err = b.readAll(filename, p, walkRar)
+		}
 	case Format7z:
 		names, err = b.readAll(filename, p, walk7z)
 	case FormatTar:
@@ -191,11 +201,47 @@ func Open(filename string, opts Options) (*Book, error) {
 		b.CoverIndex = b.PageIndex(coverName)
 	}
 
-	b.Alone = WideFlags(b.pageSizes(opts.Progress))
-	for _, name := range covers {
-		b.Alone[b.PageIndex(name)] = true
+	b.covers = covers
+	if b.cache == nil {
+		// The pages are in memory, so measuring them is quick.
+		b.Alone = b.MeasurePages()
 	}
 	return b, nil
+}
+
+// MeasurePages returns which pages are shown on their own in two-page mode,
+// besides the cover: wide pages, and the covers found by
+// Options.DetectCovers. Open does this for books read into memory. For books
+// read as their pages are shown, each page's header must be read from the
+// file, which can take a while, so Alone is left nil and the caller can call
+// this once the book is showing, using CoverFlags until then. It is safe to
+// call while pages are being read.
+func (b *Book) MeasurePages() []bool {
+	alone := WideFlags(b.pageSizes())
+	for _, name := range b.covers {
+		alone[b.PageIndex(name)] = true
+	}
+	return alone
+}
+
+// CoverFlags is Alone as far as it is known without measuring the pages: the
+// covers found by Options.DetectCovers.
+func (b *Book) CoverFlags() []bool {
+	alone := make([]bool, len(b.pages))
+	for _, name := range b.covers {
+		alone[b.PageIndex(name)] = true
+	}
+	return alone
+}
+
+// FirstPageRead is closed once a page of a book read as its pages are shown
+// has been read, so that measuring its pages can wait until then, rather
+// than slow that page down. It is nil for books read into memory.
+func (b *Book) FirstPageRead() <-chan struct{} {
+	if b.cache == nil {
+		return nil
+	}
+	return b.cache.firstRead
 }
 
 // sizeWorkers is how many pages are measured at once. Measuring a CBZ page
@@ -203,14 +249,11 @@ func Open(filename string, opts Options) (*Book, error) {
 // so measuring several at once is much faster over a network.
 const sizeWorkers = 8
 
-// pageSizes reads every page's dimensions, several at once. For a CBZ, whose
-// pages are read from the file, it reports progress after each page.
-func (b *Book) pageSizes(progress func(done, total int64)) []image.Point {
+// pageSizes reads every page's dimensions, several at once.
+func (b *Book) pageSizes() []image.Point {
 	sizes := make([]image.Point, len(b.pages))
 	total := int64(len(b.pages))
 	var next atomic.Int64
-	var mu sync.Mutex // serialises progress calls
-	var done int64
 	var wg sync.WaitGroup
 	for range min(sizeWorkers, len(b.pages)) {
 		wg.Go(func() {
@@ -220,12 +263,6 @@ func (b *Book) pageSizes(progress func(done, total int64)) []image.Point {
 					return
 				}
 				sizes[i] = b.pageSize(b.pages[i])
-				if b.zr != nil && progress != nil {
-					mu.Lock()
-					done++
-					progress(done, total)
-					mu.Unlock()
-				}
 			}
 		})
 	}
@@ -290,7 +327,7 @@ func (b *Book) openZip(filename string) ([]string, error) {
 	// Go's deflate reader reads the archive 4 KB at a time, so a 2 MB page
 	// takes hundreds of reads, each a round trip over a network.
 	zr.RegisterDecompressor(zip.Deflate, func(r io.Reader) io.ReadCloser {
-		return flate.NewReader(bufio.NewReaderSize(r, zipBufferSize))
+		return flate.NewReader(bufio.NewReaderSize(r, pageBufferSize))
 	})
 	b.zr = zr
 	b.zipFiles = make(map[string]*zip.File)
@@ -306,14 +343,43 @@ func (b *Book) openZip(filename string) ([]string, error) {
 	return names, nil
 }
 
-// readBufferSize is how much of a CBR or CBT file is read at a time.
+// errSolid is returned by openRar for a solid archive, whose files can only
+// be read in order, so it is read into memory instead.
+var errSolid = errors.New("solid archive")
+
+// openRar lists a RAR archive's files, to be read as they're shown.
+// Listing only reads the file headers, which is quick even for a large
+// archive.
+func (b *Book) openRar(filename string) ([]string, error) {
+	files, err := rardecode.List(filename, rardecode.BufferSize(pageBufferSize))
+	if err != nil {
+		return nil, err
+	}
+	b.rarFiles = make(map[string]*rardecode.File)
+	var names []string
+	for _, f := range files {
+		if f.Solid {
+			return nil, errSolid
+		}
+		if f.IsDir {
+			continue
+		}
+		b.rarFiles[f.Name] = f
+		names = append(names, f.Name)
+	}
+	b.cache = newPageCache()
+	return names, nil
+}
+
+// readBufferSize is how much of a CBR or CBT file read into memory is read
+// at a time.
 const readBufferSize = 1 << 20
 
-// zipBufferSize is how much of a CBZ entry is read at a time. CBZ pages are
-// read one at a time as they're shown, and only their headers when a book
-// opens, so this is smaller than readBufferSize: big enough that most page
-// headers take one read.
-const zipBufferSize = 64 << 10
+// pageBufferSize is how much of a page is read at a time from a book read as
+// its pages are shown. Pages are read one at a time, and only their headers
+// when measuring, so this is smaller than readBufferSize: big enough that
+// most page headers take one read.
+const pageBufferSize = 64 << 10
 
 // walkFunc calls visit for every regular file in an archive, in archive order.
 // It reports how far through the file it has read to p, which may be nil.
@@ -442,6 +508,13 @@ func (b *Book) open(name string) (io.ReadCloser, error) {
 		}
 		return f.Open()
 	}
+	if b.rarFiles != nil {
+		f, ok := b.rarFiles[name]
+		if !ok {
+			return nil, os.ErrNotExist
+		}
+		return f.Open()
+	}
 	data, ok := b.data[name]
 	if !ok {
 		return nil, os.ErrNotExist
@@ -482,8 +555,8 @@ func (b *Book) Page(index int) ([]byte, string, error) {
 	name := b.pages[index]
 	var data []byte
 	var err error
-	if b.zr != nil {
-		data, err = b.zipPage(index)
+	if b.cache != nil {
+		data, err = b.readPage(index)
 	} else {
 		data, err = b.read(name)
 	}
@@ -495,8 +568,10 @@ func (b *Book) Page(index int) ([]byte, string, error) {
 
 // Close releases the archive.
 func (b *Book) Close() error {
-	if b.zr != nil {
+	if b.cache != nil {
 		b.cache.close()
+	}
+	if b.zr != nil {
 		return b.zr.Close()
 	}
 	return nil
