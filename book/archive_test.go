@@ -182,13 +182,11 @@ func TestOpenErrors(t *testing.T) {
 }
 
 func TestOpenReportsProgress(t *testing.T) {
-	dir := t.TempDir()
-	cbz := filepath.Join(dir, "book.cbz")
-	writeZip(t, cbz)
-	cbt := filepath.Join(dir, "book.cbt")
+	cbt := filepath.Join(t.TempDir(), "book.cbt")
 	writeTar(t, cbt)
 
-	for _, path := range []string{cbz, cbt, "testdata/fixture.cbr", "testdata/fixture.cb7"} {
+	// Books read into memory report reading the file.
+	for _, path := range []string{cbt, "testdata/fixture.cb7"} {
 		t.Run(filepath.Ext(path), func(t *testing.T) {
 			var last, total int64
 			calls := 0
@@ -205,6 +203,37 @@ func TestOpenReportsProgress(t *testing.T) {
 			b.Close()
 			if calls == 0 || last != total {
 				t.Errorf("progress ended at %d/%d after %d calls, want complete", last, total, calls)
+			}
+		})
+	}
+}
+
+// CBZ and non-solid CBR books open without reading their pages, which are
+// read as they're shown, and are measured later.
+func TestOpenReadsPagesLater(t *testing.T) {
+	cbz := filepath.Join(t.TempDir(), "book.cbz")
+	writeZip(t, cbz)
+	for _, path := range []string{cbz, "testdata/fixture.cbr"} {
+		t.Run(filepath.Ext(path), func(t *testing.T) {
+			b, err := Open(path, Options{Progress: func(int64, int64) { t.Error("progress reported") }})
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			defer b.Close()
+			if b.data != nil || b.cache == nil || b.Alone != nil {
+				t.Errorf("data=%v cache=%v Alone=%v; want pages read as shown, not measured", b.data != nil, b.cache != nil, b.Alone)
+			}
+			select {
+			case <-b.FirstPageRead():
+				t.Error("FirstPageRead closed before any page was read")
+			default:
+			}
+			if _, _, err := b.Page(0); err != nil {
+				t.Fatal(err)
+			}
+			<-b.FirstPageRead()
+			if got := b.MeasurePages(); len(got) != b.PageCount() {
+				t.Errorf("MeasurePages = %v, want %d flags", got, b.PageCount())
 			}
 		})
 	}

@@ -153,13 +153,20 @@ func (s *ReaderService) OpenPath(path string) (*BookInfo, error) {
 		old.Close()
 	}
 
+	// A book read as its pages are shown is measured once showing, so its
+	// spreads only know about the covers until then.
+	alone := b.Alone
+	if alone == nil {
+		alone = b.CoverFlags()
+		go s.measurePages(b, id)
+	}
 	info := &BookInfo{
 		BookID:     id,
 		Title:      b.Title,
 		PageCount:  b.PageCount(),
 		CoverIndex: b.CoverIndex,
 		RTL:        b.RTL,
-		Spreads:    book.BuildSpreads(b.PageCount(), b.CoverIndex, b.Alone),
+		Spreads:    book.BuildSpreads(b.PageCount(), b.CoverIndex, alone),
 		Metadata:   b.Metadata,
 		StartPage:  start,
 		OpenSeq:    seq,
@@ -171,6 +178,33 @@ func (s *ReaderService) OpenPath(path string) (*BookInfo, error) {
 		s.onOpen()
 	}
 	return info, nil
+}
+
+// SpreadsChanged gives a book's two-page spreads once its pages have been
+// measured, finding the wide ones, which are shown on their own.
+type SpreadsChanged struct {
+	BookID  string  `json:"bookId"`
+	Spreads [][]int `json:"spreads"`
+}
+
+// measurePages measures the pages of a book read as its pages are shown,
+// once its first page has been read so as not to slow that down, and sends
+// its spreads to the frontend if it is still open.
+func (s *ReaderService) measurePages(b *book.Book, id string) {
+	select {
+	case <-b.FirstPageRead():
+	case <-time.After(2 * time.Second):
+	}
+	alone := b.MeasurePages()
+	s.mu.RLock()
+	current := s.bookID == id
+	s.mu.RUnlock()
+	if current && s.app != nil {
+		s.app.Event.Emit("spreads-changed", SpreadsChanged{
+			BookID:  id,
+			Spreads: book.BuildSpreads(b.PageCount(), b.CoverIndex, alone),
+		})
+	}
 }
 
 // progressReporter returns a book.Options.Progress function that sends the

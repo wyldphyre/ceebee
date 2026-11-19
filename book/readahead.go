@@ -3,15 +3,16 @@ package book
 import "sync"
 
 // readAheadPages is how many pages after the one requested are read ahead
-// of time from a CBZ, so turning pages quickly doesn't wait on a slow disk or
-// network. CBR, CB7 and CBT pages are already in memory.
+// of time from a book read as its pages are shown (CBZ and non-solid CBR),
+// so turning pages quickly doesn't wait on a slow disk or network. Other
+// books' pages are already in memory.
 const readAheadPages = 8
 
 // maxCachedPages is how many pages the read-ahead cache holds: those read
 // ahead, and a few already shown, for going back.
 const maxCachedPages = readAheadPages + 4
 
-// pageCache holds CBZ pages read ahead of time, keyed by index.
+// pageCache holds pages read ahead of time, keyed by index.
 type pageCache struct {
 	mu      sync.Mutex
 	pages   map[int]cachedPage
@@ -19,6 +20,9 @@ type pageCache struct {
 	last    int                   // the page last requested
 	running bool                  // whether a read-ahead goroutine is running
 	closed  bool
+
+	firstRead chan struct{} // closed once a page has been read
+	firstOnce sync.Once
 }
 
 type cachedPage struct {
@@ -27,13 +31,14 @@ type cachedPage struct {
 }
 
 func newPageCache() *pageCache {
-	return &pageCache{pages: map[int]cachedPage{}, reading: map[int]chan struct{}{}}
+	return &pageCache{pages: map[int]cachedPage{}, reading: map[int]chan struct{}{}, firstRead: make(chan struct{})}
 }
 
-// zipPage returns a CBZ page, from the cache if it has been read ahead, and
+// readPage returns a page, from the cache if it has been read ahead, and
 // reads ahead the pages after it.
-func (b *Book) zipPage(index int) ([]byte, error) {
+func (b *Book) readPage(index int) ([]byte, error) {
 	c := b.cache
+	defer c.firstOnce.Do(func() { close(c.firstRead) })
 	c.mu.Lock()
 	c.last = index
 	for {

@@ -30,6 +30,8 @@ func init() {
 	application.RegisterEvent[int]("open-progress")
 	// Sent when the unfinished books' saved positions change from the menu.
 	application.RegisterEvent[application.Void]("unfinished-changed")
+	// Sent with a book's two-page spreads once its pages have been measured.
+	application.RegisterEvent[SpreadsChanged]("spreads-changed")
 	// Sent when the book is closed by closing the window on macOS.
 	application.RegisterEvent[application.Void]("book-closed")
 	// Sent when About CeeBee is chosen from the menu.

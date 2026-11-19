@@ -35,7 +35,7 @@ func (b *Book) pageSize(name string) image.Point {
 		head, _ := io.ReadAll(io.LimitReader(rc, 64<<10))
 		return avifSize(head)
 	}
-	cfg, _, err := image.DecodeConfig(bufio.NewReaderSize(rc, zipBufferSize))
+	cfg, _, err := image.DecodeConfig(bufio.NewReaderSize(rc, pageBufferSize))
 	if err != nil {
 		return image.Point{}
 	}

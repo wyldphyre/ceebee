@@ -557,6 +557,18 @@ function closeBook() {
 
 Events.On("book-closed", closeBook);
 
+// Go measures the pages of a CBZ or CBR once it's showing, finding the wide
+// pages, which are shown on their own, and sends the two-page spreads. Stay
+// on the same page, showing it again if its view has changed.
+Events.On("spreads-changed", (e) => {
+    if (!book || book.bookId !== e.data.bookId) return;
+    const before = views()[viewIndex];
+    book.spreads = e.data.spreads;
+    viewIndex = Math.max(0, views().findIndex((v) => v.includes(before[0])));
+    if (views()[viewIndex].join() !== before.join()) render();
+    else updateToolbar();
+});
+
 // Lists the unfinished books on the opening screen, hiding the list if there
 // are none.
 async function showUnfinished() {
